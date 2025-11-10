@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -29,6 +29,13 @@ import {
 import { useLanguage } from '@/hooks/use-language'
 import { useAuth } from '@/hooks/use-auth'
 
+// Add Mapbox GL JS
+import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
+
+// Set Mapbox access token
+mapboxgl.accessToken = 'pk.eyJ1IjoiZWlteWF0bW9uIiwiYSI6ImNtaHM3c2JtODBxbHMycnI4dTljeTBhOGMifQ.hvR26kiNlnorTCJ1hdN5nQ'
+
 interface Pin {
   id: string
   type: 'damaged' | 'safe'
@@ -41,6 +48,14 @@ interface Pin {
   createdAt: Date
   image?: string
   assignedTo?: string
+}
+
+// Define User interface to match useAuth hook
+interface User {
+  id: string
+  name: string
+  email: string
+  role: 'admin' | 'tracking_volunteer' | 'supply_volunteer' | 'user' // Add role property
 }
 
 // Mock data for demonstration
@@ -94,27 +109,208 @@ export default function HomePage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: 16.8409, lng: 96.1735 })
   const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [mapLoading, setMapLoading] = useState(true)
+  const [mapError, setMapError] = useState<string | null>(null)
+  const [isSelectingLocation, setIsSelectingLocation] = useState(false)
+  const [newPinLocation, setNewPinLocation] = useState<{ lat: number; lng: number } | null>(null)
+  
+  // Mapbox map reference
+  const mapContainer = useRef<HTMLDivElement>(null)
+  const map = useRef<mapboxgl.Map | null>(null)
+  const markers = useRef<{ [key: string]: mapboxgl.Marker }>({})
+  const userMarker = useRef<mapboxgl.Marker | null>(null)
+  const tempMarker = useRef<mapboxgl.Marker | null>(null)
+
+  // Type-safe user role check
+  const userRole = (user as User)?.role
+
+  // Move filteredPins declaration here, before the useEffect that uses it
+  const filteredPins = pins.filter(pin => {
+    if (userRole === 'supply_volunteer') {
+      return pin.status === 'confirmed' && pin.type === 'damaged'
+    }
+    return true
+  })
 
   useEffect(() => {
-    // Get user's current location
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const location = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
+    // Initialize Mapbox map
+    if (!map.current && mapContainer.current) {
+      try {
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [mapCenter.lng, mapCenter.lat],
+          zoom: 12
+        })
+
+        // Add navigation control
+        map.current.addControl(new mapboxgl.NavigationControl(), 'top-right')
+        
+        // Handle map load
+        map.current.on('load', () => {
+          setMapLoading(false)
+          
+          // Get user's current location
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                const location = {
+                  lat: position.coords.latitude,
+                  lng: position.coords.longitude
+                }
+                setUserLocation(location)
+                setMapCenter(location)
+                
+                // Update map center
+                if (map.current) {
+                  map.current.flyTo({
+                    center: [location.lng, location.lat],
+                    zoom: 14
+                  })
+                  
+                  // Add user location marker
+                  userMarker.current = new mapboxgl.Marker({
+                    color: '#3B82F6'
+                  })
+                  .setLngLat([location.lng, location.lat])
+                  .addTo(map.current!)
+                }
+              },
+              (error) => {
+                console.error('Error getting location:', error)
+              }
+            )
           }
-          setUserLocation(location)
-          setMapCenter(location)
-        },
-        (error) => {
-          console.error('Error getting location:', error)
-          // Default to Yangon coordinates if location access denied
-          setMapCenter({ lat: 16.8409, lng: 96.1735 })
+        })
+        
+        // Handle map click for selecting new pin location
+        map.current.on('click', (e) => {
+          if (isSelectingLocation) {
+            const { lng, lat } = e.lngLat
+            setNewPinLocation({ lat, lng })
+            
+            // Remove previous temp marker
+            if (tempMarker.current) {
+              tempMarker.current.remove()
+            }
+            
+            // Add temp marker
+            tempMarker.current = new mapboxgl.Marker({
+              color: '#9333EA'
+            })
+            .setLngLat([lng, lat])
+            .addTo(map.current!)
+          }
+        })
+        
+        // Handle map error
+        map.current.on('error', (e) => {
+          console.error('Mapbox error:', e)
+          setMapError('Failed to load map. Please try again later.')
+          setMapLoading(false)
+        })
+        
+        // Handle resize
+        const resizeObserver = new ResizeObserver(() => {
+          if (map.current) {
+            map.current.resize()
+          }
+        })
+        
+        if (mapContainer.current) {
+          resizeObserver.observe(mapContainer.current)
         }
-      )
+        
+        return () => {
+          resizeObserver.disconnect()
+        }
+      } catch (error) {
+        console.error('Error initializing map:', error)
+        setMapError('Failed to initialize map. Please try again later.')
+        setMapLoading(false)
+      }
+    }
+
+    return () => {
+      // Clean up map on unmount
+      if (map.current) {
+        map.current.remove()
+        map.current = null
+      }
     }
   }, [])
+
+  // Update markers when pins change
+  useEffect(() => {
+    if (!map.current || mapLoading) return
+
+    // Remove all existing markers
+    Object.values(markers.current).forEach(marker => marker.remove())
+    markers.current = {}
+
+    // Add markers for each pin
+    filteredPins.forEach(pin => {
+      // Create marker element
+      const el = document.createElement('div')
+      el.className = 'cursor-pointer'
+      
+      // Create marker based on pin type
+      const markerDiv = document.createElement('div')
+      markerDiv.className = `w-8 h-8 rounded-full flex items-center justify-center shadow-lg ${
+        pin.type === 'damaged' ? 'bg-red-500' : 'bg-green-500'
+      }`
+      
+      // Add icon
+      const icon = document.createElement('div')
+      if (pin.type === 'damaged') {
+        icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`
+      } else {
+        icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`
+      }
+      markerDiv.appendChild(icon)
+      
+      // Add status indicator
+      const statusDiv = document.createElement('div')
+      statusDiv.className = `absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${
+        pin.status === 'pending' ? 'bg-yellow-400' :
+        pin.status === 'confirmed' ? 'bg-green-400' : 'bg-blue-400'
+      }`
+      
+      el.appendChild(markerDiv)
+      el.appendChild(statusDiv)
+      
+      // Create popup
+      const popup = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false
+      }).setHTML(`
+        <div class="p-2">
+          <div class="font-semibold">${pin.title}</div>
+          <div class="text-sm text-gray-600">${pin.description}</div>
+          <div class="mt-1">
+            <span class="text-xs px-2 py-1 rounded-full ${
+              pin.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+              pin.status === 'confirmed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+            }">${pin.status}</span>
+          </div>
+        </div>
+      `)
+      
+      // Create marker
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([pin.lng, pin.lat])
+        .setPopup(popup)
+        .addTo(map.current!)
+      
+      // Add click event
+      el.addEventListener('click', () => {
+        setSelectedPin(pin)
+      })
+      
+      // Store marker reference
+      markers.current[pin.id] = marker
+    })
+  }, [filteredPins, mapLoading])
 
   const handleGetCurrentLocation = () => {
     setIsGettingLocation(true)
@@ -127,6 +323,26 @@ export default function HomePage() {
           }
           setUserLocation(location)
           setMapCenter(location)
+          
+          // Update map center
+          if (map.current) {
+            map.current.flyTo({
+              center: [location.lng, location.lat],
+              zoom: 14
+            })
+            
+            // Update user marker
+            if (userMarker.current) {
+              userMarker.current.setLngLat([location.lng, location.lat])
+            } else {
+              userMarker.current = new mapboxgl.Marker({
+                color: '#3B82F6'
+              })
+              .setLngLat([location.lng, location.lat])
+              .addTo(map.current!)
+            }
+          }
+          
           setIsGettingLocation(false)
         },
         (error) => {
@@ -140,14 +356,17 @@ export default function HomePage() {
   const handleCreatePin = () => {
     if (!pinTitle || !pinDescription) return
 
+    // Use selected location or map center
+    const location = newPinLocation || mapCenter
+
     const newPin: Pin = {
       id: Date.now().toString(),
       type: pinType,
-      status: user?.role === 'tracking_volunteer' ? 'confirmed' : 'pending',
+      status: userRole === 'tracking_volunteer' ? 'confirmed' : 'pending',
       title: pinTitle,
       description: pinDescription,
-      lat: mapCenter.lat + (Math.random() - 0.5) * 0.01,
-      lng: mapCenter.lng + (Math.random() - 0.5) * 0.01,
+      lat: location.lat,
+      lng: location.lng,
       createdBy: user?.name || 'Anonymous User',
       createdAt: new Date(),
       image: pinImage ? URL.createObjectURL(pinImage) : undefined
@@ -158,6 +377,22 @@ export default function HomePage() {
     setPinDescription('')
     setPinImage(null)
     setShowPinDialog(false)
+    setNewPinLocation(null)
+    setIsSelectingLocation(false)
+    
+    // Remove temp marker
+    if (tempMarker.current) {
+      tempMarker.current.remove()
+      tempMarker.current = null
+    }
+    
+    // Fly to new pin location
+    if (map.current) {
+      map.current.flyTo({
+        center: [newPin.lng, newPin.lat],
+        zoom: 14
+      })
+    }
   }
 
   const handleConfirmPin = (pinId: string) => {
@@ -194,13 +429,6 @@ export default function HomePage() {
     }
   }
 
-  const filteredPins = pins.filter(pin => {
-    if (user?.role === 'supply_volunteer') {
-      return pin.status === 'confirmed' && pin.type === 'damaged'
-    }
-    return true
-  })
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -224,7 +452,17 @@ export default function HomePage() {
                 {t('map.currentLocation')}
               </Button>
               
-              <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
+              <Dialog open={showPinDialog} onOpenChange={(open) => {
+                setShowPinDialog(open)
+                if (!open) {
+                  setNewPinLocation(null)
+                  setIsSelectingLocation(false)
+                  if (tempMarker.current) {
+                    tempMarker.current.remove()
+                    tempMarker.current = null
+                  }
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button className="flex items-center gap-2">
                     <Plus className="w-4 h-4" />
@@ -281,6 +519,26 @@ export default function HomePage() {
                     </div>
                     
                     <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setIsSelectingLocation(true)
+                          setShowPinDialog(false)
+                        }}
+                        className="flex-1"
+                      >
+                        <MapPin className="w-4 h-4 mr-2" />
+                        {newPinLocation ? 'Change Location' : 'Select on Map'}
+                      </Button>
+                    </div>
+                    
+                    {newPinLocation && (
+                      <div className="text-sm text-gray-600">
+                        Selected location: {newPinLocation.lat.toFixed(6)}, {newPinLocation.lng.toFixed(6)}
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2">
                       <Button onClick={handleCreatePin} className="flex-1">
                         {t('map.submit')}
                       </Button>
@@ -301,86 +559,79 @@ export default function HomePage() {
           {/* Map Area */}
           <div className="lg:col-span-2">
             <Card className="h-[600px]">
-              <CardContent className="p-0 h-full">
-                {/* Simple Map Placeholder */}
-                <div className="relative h-full bg-gray-100 rounded-lg overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-green-50">
-                    {/* Map Grid */}
-                    <div className="absolute inset-0 opacity-20">
-                      {[...Array(10)].map((_, i) => (
-                        <div key={`h-${i}`} className="absolute w-full border-b border-gray-400" style={{ top: `${i * 10}%` }} />
-                      ))}
-                      {[...Array(10)].map((_, i) => (
-                        <div key={`v-${i}`} className="absolute h-full border-r border-gray-400" style={{ left: `${i * 10}%` }} />
-                      ))}
+              <CardContent className="p-0 h-full relative">
+                {/* Mapbox Map */}
+                <div ref={mapContainer} className="h-full w-full rounded-lg overflow-hidden" />
+                
+                {/* Map Loading State */}
+                {mapLoading && (
+                  <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-gray-600">Loading map...</p>
                     </div>
-                    
-                    {/* User Location */}
-                    {userLocation && (
-                      <div 
-                        className="absolute w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-lg z-20"
-                        style={{ 
-                          left: '50%', 
-                          top: '50%',
-                          transform: 'translate(-50%, -50%)'
-                        }}
-                      >
-                        <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping" />
-                      </div>
-                    )}
-                    
-                    {/* Pins */}
-                    {filteredPins.map((pin, index) => (
-                      <div
-                        key={pin.id}
-                        className="absolute cursor-pointer transform -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110"
-                        style={{ 
-                          left: `${20 + (index * 25) % 60}%`, 
-                          top: `${20 + (index * 30) % 60}%` 
-                        }}
-                        onClick={() => setSelectedPin(pin)}
-                      >
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg ${
-                          pin.type === 'damaged' ? 'bg-red-500' : 'bg-green-500'
-                        }`}>
-                          {pin.type === 'damaged' ? (
-                            <AlertTriangle className="w-4 h-4 text-white" />
-                          ) : (
-                            <Shield className="w-4 h-4 text-white" />
-                          )}
-                        </div>
-                        <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${
-                          pin.status === 'pending' ? 'bg-yellow-400' :
-                          pin.status === 'confirmed' ? 'bg-green-400' : 'bg-blue-400'
-                        }`} />
-                      </div>
-                    ))}
                   </div>
-                  
-                  {/* Map Legend */}
-                  <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3">
-                    <h3 className="text-sm font-semibold mb-2">Legend</h3>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="w-4 h-4 bg-red-500 rounded-full" />
-                        <span>{t('map.damagedLocation')}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="w-4 h-4 bg-green-500 rounded-full" />
-                        <span>{t('map.safeZone')}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="w-3 h-3 bg-yellow-400 rounded-full" />
-                        <span>{t('map.pending')}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="w-3 h-3 bg-green-400 rounded-full" />
-                        <span>{t('map.confirmed')}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="w-3 h-3 bg-blue-400 rounded-full" />
-                        <span>{t('map.completed')}</span>
-                      </div>
+                )}
+                
+                {/* Map Error State */}
+                {mapError && (
+                  <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
+                    <div className="text-center max-w-md p-4">
+                      <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                      <p className="text-gray-600">{mapError}</p>
+                      <Button 
+                        onClick={() => window.location.reload()} 
+                        className="mt-4"
+                      >
+                        Reload Page
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Location Selection Indicator */}
+                {isSelectingLocation && (
+                  <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 z-10 max-w-xs">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-purple-600" />
+                      <p className="text-sm">Click on the map to select a location for your pin</p>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      onClick={() => {
+                        setIsSelectingLocation(false)
+                        setShowPinDialog(true)
+                      }}
+                      className="mt-2 w-full"
+                    >
+                      Done
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Map Legend */}
+                <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 z-10">
+                  <h3 className="text-sm font-semibold mb-2">Legend</h3>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-4 h-4 bg-red-500 rounded-full" />
+                      <span>{t('map.damagedLocation')}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-4 h-4 bg-green-500 rounded-full" />
+                      <span>{t('map.safeZone')}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-3 h-3 bg-yellow-400 rounded-full" />
+                      <span>{t('map.pending')}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-3 h-3 bg-green-400 rounded-full" />
+                      <span>{t('map.confirmed')}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="w-3 h-3 bg-blue-400 rounded-full" />
+                      <span>{t('map.completed')}</span>
                     </div>
                   </div>
                 </div>
@@ -424,7 +675,16 @@ export default function HomePage() {
                     <div
                       key={pin.id}
                       className="p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                      onClick={() => setSelectedPin(pin)}
+                      onClick={() => {
+                        setSelectedPin(pin)
+                        // Fly to pin location on map
+                        if (map.current) {
+                          map.current.flyTo({
+                            center: [pin.lng, pin.lat],
+                            zoom: 15
+                          })
+                        }
+                      }}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
@@ -452,21 +712,30 @@ export default function HomePage() {
                       </div>
                       
                       {/* Action buttons for volunteers */}
-                      {user?.role === 'tracking_volunteer' && pin.status === 'pending' && (
+                      {userRole === 'tracking_volunteer' && pin.status === 'pending' && (
                         <div className="flex gap-1 mt-2">
-                          <Button size="sm" onClick={() => handleConfirmPin(pin.id)} className="flex-1">
+                          <Button size="sm" onClick={(e) => {
+                            e.stopPropagation()
+                            handleConfirmPin(pin.id)
+                          }} className="flex-1">
                             <Check className="w-3 h-3 mr-1" />
                             Confirm
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleDenyPin(pin.id)} className="flex-1">
+                          <Button size="sm" variant="outline" onClick={(e) => {
+                            e.stopPropagation()
+                            handleDenyPin(pin.id)
+                          }} className="flex-1">
                             <X className="w-3 h-3 mr-1" />
                             Deny
                           </Button>
                         </div>
                       )}
                       
-                      {user?.role === 'supply_volunteer' && pin.status === 'confirmed' && pin.type === 'damaged' && (
-                        <Button size="sm" onClick={() => handleMarkCompleted(pin.id)} className="w-full mt-2">
+                      {userRole === 'supply_volunteer' && pin.status === 'confirmed' && pin.type === 'damaged' && (
+                        <Button size="sm" onClick={(e) => {
+                          e.stopPropagation()
+                          handleMarkCompleted(pin.id)
+                        }} className="w-full mt-2">
                           <Check className="w-3 h-3 mr-1" />
                           Mark Delivered
                         </Button>
@@ -544,7 +813,7 @@ export default function HomePage() {
               
               {/* Action buttons */}
               <div className="flex gap-2">
-                {user?.role === 'tracking_volunteer' && selectedPin.status === 'pending' && (
+                {userRole === 'tracking_volunteer' && selectedPin.status === 'pending' && (
                   <>
                     <Button onClick={() => handleConfirmPin(selectedPin.id)} className="flex-1">
                       <Check className="w-4 h-4 mr-2" />
@@ -557,7 +826,7 @@ export default function HomePage() {
                   </>
                 )}
                 
-                {user?.role === 'supply_volunteer' && selectedPin.status === 'confirmed' && selectedPin.type === 'damaged' && (
+                {userRole === 'supply_volunteer' && selectedPin.status === 'confirmed' && selectedPin.type === 'damaged' && (
                   <Button onClick={() => handleMarkCompleted(selectedPin.id)} className="w-full">
                     <Check className="w-4 h-4 mr-2" />
                     Mark Delivered
