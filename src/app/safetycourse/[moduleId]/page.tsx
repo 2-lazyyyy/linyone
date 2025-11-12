@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { mockSafetyModules } from "@/data/mockSafetyModules";
 import { mockPoints } from "@/data/mockPoint";
+import * as React from "react";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -22,10 +24,13 @@ interface ModuleDetailProps {
 }
 
 export default function ModuleDetail({ params }: ModuleDetailProps) {
-  // Find the course by module ID
-  const course = mockSafetyModules.find(
-    (m) => m.id.toString() === params.moduleId
-  );
+  // `params` may be a Promise in this Next.js version; unwrap with React.use()
+  // before accessing properties.
+  // See Next.js migration guidance: use React.use(params) in client components.
+  const resolvedParams = React.use(params as any) as { moduleId: string };
+  const moduleId = resolvedParams.moduleId;
+
+  const course = mockSafetyModules.find((m) => m.id.toString() === moduleId);
 
   const userId = "2"; // Simulate logged-in user
 
