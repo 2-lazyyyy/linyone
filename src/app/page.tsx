@@ -130,6 +130,7 @@ export default function HomePage() {
   const [showConfirmPinDialog, setShowConfirmPinDialog] = useState(false);
   const [showPinListDialog, setShowPinListDialog] = useState(false);
   const [pinToConfirm, setPinToConfirm] = useState<Pin | null>(null);
+    const [trackerSelectedItems, setTrackerSelectedItems] = useState<Map<string, number>>(new Map());
   
   // Items from database
   const [availableItems, setAvailableItems] = useState<Item[]>([]);
@@ -935,6 +936,77 @@ export default function HomePage() {
                         <div className="text-sm text-gray-600">
                           Selected location: {newPinLocation.lat.toFixed(6)},{" "}
                           {newPinLocation.lng.toFixed(6)}
+                        </div>
+                      )}
+
+                      {/* Tracker: Requested Items UI */}
+                      {isUserTracker && (
+                        <div className="space-y-3 border-t pt-4">
+                          <Label className="text-sm font-medium">Select Requested Items</Label>
+                          <div className="max-h-48 overflow-y-auto space-y-2">
+                            {availableItems.length > 0 ? (
+                              availableItems.map((item) => (
+                                <div key={item.id} className="flex items-center gap-3 p-2 border rounded-lg">
+                                  <input
+                                    type="checkbox"
+                                    id={`tracker-item-${item.id}`}
+                                    checked={trackerSelectedItems.has(item.id)}
+                                    onChange={() => {
+                                      const newSelected = new Map(trackerSelectedItems);
+                                      if (newSelected.has(item.id)) {
+                                        newSelected.delete(item.id);
+                                      } else {
+                                        newSelected.set(item.id, 10);
+                                      }
+                                      setTrackerSelectedItems(newSelected);
+                                    }}
+                                    className="w-4 h-4"
+                                  />
+                                  <Label htmlFor={`tracker-item-${item.id}`} className="flex-1 cursor-pointer text-xs">
+                                    {item.name} <span className="text-xs text-gray-500">({item.unit})</span>
+                                  </Label>
+                                  {trackerSelectedItems.has(item.id) && (
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 w-6 p-0"
+                                        onClick={() => {
+                                          const qty = Math.max(0, (trackerSelectedItems.get(item.id) || 0) - 1);
+                                          const newSelected = new Map(trackerSelectedItems);
+                                          if (qty > 0) {
+                                            newSelected.set(item.id, qty);
+                                          } else {
+                                            newSelected.delete(item.id);
+                                          }
+                                          setTrackerSelectedItems(newSelected);
+                                        }}
+                                        disabled={(trackerSelectedItems.get(item.id) || 0) === 0}
+                                      >
+                                        -
+                                      </Button>
+                                      <span className="w-8 text-center text-xs">{trackerSelectedItems.get(item.id) || 0}</span>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 w-6 p-0"
+                                        onClick={() => {
+                                          const qty = (trackerSelectedItems.get(item.id) || 0) + 1;
+                                          const newSelected = new Map(trackerSelectedItems);
+                                          newSelected.set(item.id, qty);
+                                          setTrackerSelectedItems(newSelected);
+                                        }}
+                                      >
+                                        +
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-gray-500 text-center py-2">No items available</p>
+                            )}
+                          </div>
                         </div>
                       )}
                     

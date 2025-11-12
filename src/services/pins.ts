@@ -891,8 +891,9 @@ export async function fetchConfirmedPinsForDashboard(): Promise<{
  * 
  * Logic:
  * - User provides quantities they can fulfill
- * - remaining_qty = requested_qty - accepted_quantity
- * - If remaining_qty === 0, all items fulfilled for that pin_item
+ * - remaining_qty = current_remaining_qty - accepted_quantity
+ * - After updating all items, checks if pin should be deleted (all items fulfilled)
+ * - If all items have remaining_qty === 0, calls deletePinIfNoItemsRemain to delete the pin
  */
 export async function acceptHelpRequestItems(
   pinId: string,
@@ -900,11 +901,13 @@ export async function acceptHelpRequestItems(
     pinItemId: string
     acceptedQuantity: number
   }>
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; completed?: boolean; error?: string }> {
   try {
+    console.log(`📝 Accepting items for pin ${pinId}`)
+
     // Update each pin_item with the accepted quantity
     for (const item of acceptedItems) {
-      // First, get the current requested_qty
+      // First, get the current requested_qty and remaining_qty
       const { data: pinItem, error: fetchError } = await supabase
         .from('pin_items')
         .select('requested_qty, remaining_qty')
@@ -917,7 +920,13 @@ export async function acceptHelpRequestItems(
       }
 
       // Calculate new remaining_qty
-      const newRemainingQty = Math.max(0, pinItem.requested_qty - item.acceptedQuantity)
+      // Use the current remaining_qty when available (represents how many are still needed).
+      // Fallback to requested_qty if remaining_qty is null/undefined (initial state).
+      const currentRemaining = typeof pinItem.remaining_qty === 'number' ? pinItem.remaining_qty : pinItem.requested_qty
+      const newRemainingQty = Math.max(0, currentRemaining - item.acceptedQuantity)
+      const acceptedSoFar = pinItem.requested_qty - newRemainingQty
+
+      console.log(`  ✅ Item ${item.pinItemId}: accepted=${acceptedSoFar}, remaining=${newRemainingQty}`)
 
       // Update the pin_item
       const { error: updateError } = await supabase
@@ -931,14 +940,56 @@ export async function acceptHelpRequestItems(
       }
     }
 
-    return { success: true }
+    console.log(`✅ All items updated for pin ${pinId}`)
+
+    // Check if all items are now fulfilled (remaining_qty === 0 for all)
+    const { data: pinItems, error: checkError } = await supabase
+      .from('pin_items')
+      .select('remaining_qty')
+      .eq('pin_id', pinId)
+
+    if (checkError) {
+      console.error('Error checking pin completion:', checkError)
+      return { success: true, completed: false } // Items updated, just failed to check completion
+    }
+
+    const allFulfilled = pinItems?.length > 0 && pinItems.every((pi: any) => pi.remaining_qty === 0)
+
+    if (allFulfilled) {
+      console.log(`🎉 All items fulfilled for pin ${pinId}! Deleting all pin_items...`)
+
+      // Step 1: Delete ALL pin_items for this pin
+      const { error: deleteItemsError } = await supabase
+        .from('pin_items')
+        .delete()
+        .eq('pin_id', pinId)
+
+      if (deleteItemsError) {
+        console.error('Error deleting pin_items:', deleteItemsError)
+        return { success: false, error: deleteItemsError.message }
+      }
+
+      console.log(`✅ All pin_items deleted for pin ${pinId}`)
+
+      // Step 2: Now delete the pin since it has no items left
+      const deleteResult = await deletePinIfNoItemsRemain(pinId)
+
+      if (deleteResult.success && deleteResult.deleted) {
+        console.log(`✅ Pin ${pinId} successfully deleted`)
+        return { success: true, completed: true }
+      } else {
+        console.warn(`⚠️ Could not delete pin ${pinId}: ${deleteResult.error}`)
+        return { success: true, completed: false, error: deleteResult.error }
+      }
+    }
+
+    console.log(`📌 Pin ${pinId} still has unfulfilled items`)
+    return { success: true, completed: false }
   } catch (err) {
     console.error('Error in acceptHelpRequestItems:', err)
     return { success: false, error: 'Failed to accept items' }
   }
-}
-
-/**
+}/**
  * Check if a pin is fully completed (all items have 0 remaining)
  * and optionally delete it if so
  */
@@ -992,10 +1043,12 @@ export async function checkAndHandleCompletedPin(pinId: string): Promise<{
  * Call this after deleting pin_items to check if the pin should also be deleted
  * 
  * Logic:
- * 1. Get the pin_id from the deleted pin_items
- * 2. Check if there are any remaining pin_items for this pin_id
- * 3. If NO pin_items remain, delete the pins row with that pin_id
- * 4. Return success status
+ * 1. Check if there are any remaining pin_items for this pin_id
+ * 2. If NO pin_items remain, delete the pins row with that pin_id
+ * 3. Return success status
+ * 
+ * NOTE: This function only deletes the PIN, not the pin_items!
+ * You must delete pin_items BEFORE calling this function.
  */
 export async function deletePinIfNoItemsRemain(
   pinId: string
