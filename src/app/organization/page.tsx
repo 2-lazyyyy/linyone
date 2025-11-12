@@ -39,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLanguage } from '@/hooks/use-language'
 import { useAuth } from '@/hooks/use-auth'
+import { useToast } from '@/hooks/use-toast'
 import { fetchConfirmedPinsForDashboard, acceptHelpRequestItems, checkAndHandleCompletedPin } from '@/services/pins'
 
 interface Volunteer {
@@ -232,6 +233,7 @@ const mockSupplies: Supply[] = [
 export default function OrganizationPage() {
   const { t } = useLanguage()
   const { user } = useAuth()
+  const { toast } = useToast()
   const router = useRouter()
   const [volunteers, setVolunteers] = useState<Volunteer[]>(mockVolunteers)
   const [helpRequests, setHelpRequests] = useState<HelpRequest[]>(mockHelpRequests)
@@ -482,16 +484,22 @@ export default function OrganizationPage() {
       return
     }
 
-    // Call backend to accept items
+    // Call backend to accept items (now handles completion check automatically)
     const result = await acceptHelpRequestItems(selectedRequest.id, itemsToAccept)
     
     if (result.success) {
-      // Check if this pin is now fully completed (all items have remaining_qty = 0)
-      // If so, delete all pin_items (which triggers the database trigger to delete the pin)
-      const completionCheck = await checkAndHandleCompletedPin(selectedRequest.id)
-      
-      if (completionCheck.success && completionCheck.isCompleted) {
-        console.log(`✅ Pin ${selectedRequest.id} completed and marked for deletion`)
+      if (result.completed) {
+        console.log(`✅ Pin ${selectedRequest.id} completed and deleted`)
+        toast({
+          title: "✅ Pin Completed",
+          description: `All items accepted. Pin has been completed and deleted.`,
+        })
+      } else {
+        console.log(`📌 Pin ${selectedRequest.id} partially accepted`)
+        toast({
+          title: "✅ Items Accepted",
+          description: `Items accepted. Pin still has unfulfilled requests.`,
+        })
       }
       
       // Refresh help requests from database
@@ -505,6 +513,11 @@ export default function OrganizationPage() {
       setAcceptQuantities({})
     } else {
       console.error('Failed to accept items:', result.error)
+      toast({
+        title: "❌ Error",
+        description: result.error || 'Failed to accept items',
+        variant: "destructive",
+      })
     }
   }
 
@@ -1513,6 +1526,8 @@ export default function OrganizationPage() {
                     <TableRow>
                       <TableHead>Category</TableHead>
                       <TableHead>Unit</TableHead>
+                      <TableHead>Requested</TableHead>
+                      <TableHead>Accepted</TableHead>
                       <TableHead>Remaining</TableHead>
                       <TableHead>You Can Provide</TableHead>
                     </TableRow>
@@ -1520,12 +1535,16 @@ export default function OrganizationPage() {
                   <TableBody>
                     {selectedRequest.requiredItems.map((item, idx) => {
                       const remaining = item.remainingQty
+                      const requested = item.quantity
+                      const accepted = requested - remaining
                       const maxQty = remaining
                       return (
                         <TableRow key={idx}>
                           <TableCell className="font-medium">{item.category}</TableCell>
                           <TableCell>{item.unit}</TableCell>
-                          <TableCell>{remaining}</TableCell>
+                          <TableCell className="text-center font-semibold">{requested}</TableCell>
+                          <TableCell className="text-center text-green-600 font-semibold">{accepted}</TableCell>
+                          <TableCell className="text-center text-orange-600 font-semibold">{remaining}</TableCell>
                           <TableCell>
                             <Input
                               type="number"
