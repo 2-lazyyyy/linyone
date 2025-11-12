@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -22,13 +23,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  MapPin,
-  Plus,
-  AlertTriangle,
-  Shield,
-  Users,
+import { 
+  MapPin, 
+  Plus, 
+  AlertTriangle, 
+  Shield, 
+  Users, 
   Building,
   Navigation,
   Upload,
@@ -40,6 +42,20 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/hooks/use-language";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  createPin,
+  fetchPins,
+  updatePinStatus,
+  isUserActiveTracker,
+  getUserOrgMember,
+  fetchItems,
+  createPinItems,
+  fetchPinsWithItems,
+  updatePinItemQuantity,
+  type Pin as SupabasePin,
+  type Item,
+  type PinItem 
+} from "@/services/pins";
 
 // Add Mapbox GL JS
 import mapboxgl from "mapbox-gl";
@@ -61,6 +77,15 @@ interface Pin {
   createdAt: Date;
   image?: string;
   assignedTo?: string;
+  user_id?: string;
+  items?: {
+    peopleHurt?: number;
+    foodPacks?: number;
+    waterBottles?: number;
+    medicineBox?: number;
+    clothesPacks?: number;
+    blankets?: number;
+  };
 }
 
 // Define User interface to match useAuth hook
@@ -68,52 +93,15 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "tracking_volunteer" | "supply_volunteer" | "user"; // Add role property
+  role: "admin" | "tracking_volunteer" | "supply_volunteer" | "user";
+  accountType?: 'user' | 'organization';
 }
-
-// Mock data for demonstration
-const mockPins: Pin[] = [
-  {
-    id: "1",
-    type: "damaged",
-    status: "confirmed",
-    // title: "Building Collapse",
-    phone: "09786993797",
-    description: "Multi-story building collapsed, need immediate rescue",
-    lat: 16.8409,
-    lng: 96.1735,
-    createdBy: "Volunteer Team A",
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    assignedTo: "Rescue Team B",
-  },
-  {
-    id: "2",
-    type: "safe",
-    status: "confirmed",
-    phone: "09786993797",
-    description: "School gym converted to emergency shelter",
-    lat: 16.8509,
-    lng: 96.1835,
-    createdBy: "City Authority",
-    createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
-  },
-  {
-    id: "3",
-    type: "damaged",
-    status: "pending",
-    phone: "09786993797",
-    description: "Major road blocked by fallen trees",
-    lat: 16.8309,
-    lng: 96.1635,
-    createdBy: "Anonymous User",
-    createdAt: new Date(Date.now() - 30 * 60 * 1000),
-  },
-];
 
 export default function HomePage() {
   const { t, language } = useLanguage();
   const { user, isAuthenticated } = useAuth();
-  const [pins, setPins] = useState<Pin[]>(mockPins);
+  const { toast } = useToast();
+  const [pins, setPins] = useState<Pin[]>([]);
   const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
   const [showPinDialog, setShowPinDialog] = useState(false);
   const [pinType, setPinType] = useState<"damaged" | "safe">("damaged");
@@ -136,6 +124,40 @@ export default function HomePage() {
     lat: number;
     lng: number;
   } | null>(null);
+  const [isCreatingPin, setIsCreatingPin] = useState(false);
+  const [isUserTracker, setIsUserTracker] = useState(false);
+  const [userOrgMemberId, setUserOrgMemberId] = useState<string | null>(null);
+  const [showConfirmPinDialog, setShowConfirmPinDialog] = useState(false);
+  const [showPinListDialog, setShowPinListDialog] = useState(false);
+  const [pinToConfirm, setPinToConfirm] = useState<Pin | null>(null);
+    const [trackerSelectedItems, setTrackerSelectedItems] = useState<Map<string, number>>(new Map());
+  
+  // Items from database
+  const [availableItems, setAvailableItems] = useState<Item[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Map<string, number>>(new Map());
+  
+  const [emergencyKitItems, setEmergencyKitItems] = useState<Record<string, boolean>>({
+    water: false,
+    food: false,
+    flashlight: false,
+    firstAid: false,
+    batteries: false,
+    radio: false,
+    whistle: false,
+    dustMask: false,
+    plasticSheeting: false,
+    ductTape: false,
+    canOpener: false,
+    localMaps: false,
+    cellPhone: false,
+    charger: false,
+    cash: false,
+    importantDocuments: false,
+    warmClothing: false,
+    blankets: false,
+    tools: false,
+    sanitation: false,
+  });
 
   // Mapbox map reference
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -154,6 +176,59 @@ export default function HomePage() {
     }
     return true;
   });
+
+  // Load pins and items from database on mount and when user changes
+  useEffect(() => {
+    const loadPinsAndUserRole = async () => {
+      try {
+        // Fetch pins from database
+        const pinsResult = await fetchPins();
+        if (pinsResult.success && pinsResult.pins) {
+          setPins(pinsResult.pins);
+          console.log(`Loaded ${pinsResult.pins.length} pins from database`);
+        } else if (!pinsResult.success) {
+          console.warn("Failed to load pins:", pinsResult.error);
+          if (pinsResult.error) {
+            toast({
+              title: "Warning",
+              description: `Could not load pins: ${pinsResult.error}`,
+              variant: "destructive",
+            });
+          }
+        }
+
+        // Fetch items from database
+        const itemsResult = await fetchItems();
+        if (itemsResult.success && itemsResult.items) {
+          setAvailableItems(itemsResult.items);
+          console.log(`Loaded ${itemsResult.items.length} items from database`);
+        }
+
+        // Check if current user is a tracker
+        if (user?.id) {
+          try {
+            const isTracker = await isUserActiveTracker(user.id);
+            setIsUserTracker(isTracker);
+            console.log(`User tracker status: ${isTracker}`);
+
+            if (isTracker) {
+              const orgMember = await getUserOrgMember(user.id);
+              if (orgMember) {
+                setUserOrgMemberId(orgMember.id);
+                console.log(`User org-member ID: ${orgMember.id}`);
+              }
+            }
+          } catch (err) {
+            console.error("Error checking tracker status:", err);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading pins and user role:", error);
+      }
+    };
+
+    loadPinsAndUserRole();
+  }, [user?.id, toast]);
 
   useEffect(() => {
     // Initialize Mapbox map
@@ -276,6 +351,7 @@ export default function HomePage() {
       // Create marker element
       const el = document.createElement("div");
       el.className = "cursor-pointer";
+      el.setAttribute("data-pin-id", pin.id);
 
       // Create marker based on pin type
       const markerDiv = document.createElement("div");
@@ -382,66 +458,192 @@ export default function HomePage() {
     }
   };
 
-  const handleCreatePin = () => {
+  const handleCreatePin = async () => {
     if (!pinPhone || !pinDescription) return;
 
-    // Use selected location or map center
-    const location = newPinLocation || mapCenter;
+    setIsCreatingPin(true);
+    try {
+      // Use selected location or map center
+      const location = newPinLocation || mapCenter;
 
-    const newPin: Pin = {
-      id: Date.now().toString(),
-      type: pinType,
-      status: userRole === "tracking_volunteer" ? "confirmed" : "pending",
-      phone: pinPhone,
-      description: pinDescription,
-      lat: location.lat,
-      lng: location.lng,
-      createdBy: user?.name || "Anonymous User",
-      createdAt: new Date(),
-      image: pinImage ? URL.createObjectURL(pinImage) : undefined,
-    };
+      // Call Supabase service to create pin with user role for status determination
+      const result = await createPin(
+        {
+          type: pinType,
+          status: "pending", // Will be set by database based on user role
+          phone: pinPhone,
+          description: pinDescription,
+          lat: location.lat,
+          lng: location.lng,
+          createdBy: user?.name || "Anonymous User",
+          user_id: user?.id ?? null,
+          image: undefined,
+        },
+        pinImage || undefined,
+        (user as User)?.accountType === 'organization' ? 'organization' : user?.role
+      );
 
-    setPins([newPin, ...pins]);
-    setPinPhone("");
-    setPinDescription("");
-    setPinImage(null);
-    setShowPinDialog(false);
-    setNewPinLocation(null);
-    setIsSelectingLocation(false);
+      if (result.success && result.pin) {
+        // Add new pin to local state
+        setPins([result.pin, ...pins]);
 
-    // Remove temp marker
-    if (tempMarker.current) {
-      tempMarker.current.remove();
-      tempMarker.current = null;
-    }
+        // Reset form
+        setPinPhone("");
+        setPinDescription("");
+        setPinImage(null);
+        setShowPinDialog(false);
+        setNewPinLocation(null);
+        setIsSelectingLocation(false);
 
-    // Fly to new pin location
-    if (map.current) {
-      map.current.flyTo({
-        center: [newPin.lng, newPin.lat],
-        zoom: 14,
+        // Remove temp marker
+        if (tempMarker.current) {
+          tempMarker.current.remove();
+          tempMarker.current = null;
+        }
+
+        // Fly to new pin location
+        if (map.current) {
+          map.current.flyTo({
+            center: [result.pin.lng, result.pin.lat],
+            zoom: 14,
+          });
+        }
+
+        toast({
+          title: "Success",
+          description: "Pin created successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to create pin",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error creating pin:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create pin",
+        variant: "destructive",
       });
+    } finally {
+      setIsCreatingPin(false);
     }
   };
 
-  const handleConfirmPin = (pinId: string) => {
-    setPins(
-      pins.map((pin) =>
-        pin.id === pinId ? { ...pin, status: "confirmed" } : pin
-      )
-    );
+  const handleConfirmPin = async (pinId: string) => {
+    try {
+      // Verify user is authenticated and is a tracker before attempting confirmation
+      if (!user?.id) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to confirm pins",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!isUserTracker) {
+        toast({
+          title: "Error",
+          description: "Only trackers can confirm pins",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const result = await updatePinStatus(
+        pinId,
+        "confirmed",
+        userOrgMemberId || undefined,
+        user.id
+      );
+
+      if (result.success) {
+        setPins(
+          pins.map((pin) =>
+            pin.id === pinId ? { ...pin, status: "confirmed" } : pin
+          )
+        );
+        toast({
+          title: "Success",
+          description: "Pin confirmed successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to confirm pin",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error confirming pin:", error);
+      toast({
+        title: "Error",
+        description: "Failed to confirm pin",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDenyPin = (pinId: string) => {
     setPins(pins.filter((pin) => pin.id !== pinId));
   };
 
-  const handleMarkCompleted = (pinId: string) => {
-    setPins(
-      pins.map((pin) =>
-        pin.id === pinId ? { ...pin, status: "completed" } : pin
-      )
-    );
+  const handleMarkCompleted = async (pinId: string) => {
+    try {
+      // Verify user is authenticated and is a tracker
+      if (!user?.id) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to update pins",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!isUserTracker) {
+        toast({
+          title: "Error",
+          description: "Only trackers can mark pins as completed",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const result = await updatePinStatus(
+        pinId,
+        "completed",
+        undefined,
+        user.id
+      );
+
+      if (result.success) {
+        setPins(
+          pins.map((pin) =>
+            pin.id === pinId ? { ...pin, status: "completed" } : pin
+          )
+        );
+        toast({
+          title: "Success",
+          description: "Pin marked as completed",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to mark pin as completed",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error marking pin completed:", error);
+      toast({
+        title: "Error",
+        description: "Failed to mark pin as completed",
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -470,26 +672,160 @@ export default function HomePage() {
     }
   };
 
+  // Get nearby unconfirmed pins (within 5km radius)
+  const getNearbyUnconfirmedPins = () => {
+    if (!userLocation) return [];
+    
+    return pins.filter((pin) => {
+      if (pin.status !== "pending") return false;
+      
+      // Calculate distance using Haversine formula
+      const R = 6371; // Earth's radius in km
+      const dLat = ((pin.lat - userLocation.lat) * Math.PI) / 180;
+      const dLon = ((pin.lng - userLocation.lng) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((userLocation.lat * Math.PI) / 180) *
+          Math.cos((pin.lat * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      
+      return distance <= 5; // 5km radius
+    });
+  };
+
+  const handleConfirmPinClick = () => {
+    if (!userLocation) {
+      alert("Please get your current location first");
+      return;
+    }
+    setShowPinListDialog(true);
+  };
+
+  const handleSelectPinToConfirm = (pin: Pin) => {
+    setPinToConfirm(pin);
+    setShowPinListDialog(false);
+    setShowConfirmPinDialog(true);
+    // Reset selected items
+    setSelectedItems(new Map());
+  };
+
+  const handleItemToggle = (itemId: string, quantity: number) => {
+    const newSelected = new Map(selectedItems);
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId);
+    } else {
+      newSelected.set(itemId, quantity);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const handleItemQuantityChange = (itemId: string, quantity: number) => {
+    const newSelected = new Map(selectedItems);
+    if (quantity > 0) {
+      newSelected.set(itemId, quantity);
+    } else {
+      newSelected.delete(itemId);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const handleConfirmPinWithItems = async () => {
+    if (!pinToConfirm) return;
+
+    try {
+      // First, confirm the pin status
+      const result = await updatePinStatus(
+        pinToConfirm.id,
+        "confirmed",
+        userOrgMemberId || undefined,
+        user?.id
+      );
+
+      if (result.success) {
+        // Then, create pin items records for selected items
+        if (selectedItems.size > 0) {
+          const itemsToCreate = Array.from(selectedItems.entries()).map(([itemId, quantity]) => ({
+            item_id: itemId,
+            requested_qty: quantity,
+          }));
+
+          const itemsResult = await createPinItems(pinToConfirm.id, itemsToCreate);
+
+          if (!itemsResult.success) {
+            console.warn("Warning: Pin confirmed but items not created:", itemsResult.error);
+          }
+        }
+
+        // Update local state
+        setPins(
+          pins.map((pin) =>
+            pin.id === pinToConfirm.id
+              ? { ...pin, status: "confirmed" as const }
+              : pin
+          )
+        );
+
+        setShowConfirmPinDialog(false);
+        setPinToConfirm(null);
+        setSelectedItems(new Map());
+
+        toast({
+          title: "Success",
+          description: "Pin confirmed with items recorded",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to confirm pin",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error confirming pin with items:", error);
+      toast({
+        title: "Error",
+        description: "Failed to confirm pin",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Map Area */}
           <div className="lg:col-span-2">
             {/* Header */}
-            <div className="max-w-[90rem] mx-auto py-4">
-              {/* <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"> */}
-              <div className="flex items-center gap-2 w-full">
+            <div className="max-w-7xl mx-auto py-4">
+              <div className={`flex items-center gap-2 w-full ${isUserTracker ? "flex-wrap" : ""}`}>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size={isUserTracker ? "sm" : "default"}
                   onClick={handleGetCurrentLocation}
                   disabled={isGettingLocation}
-                  className="flex items-center lg:gap-2 w-1/2"
+                  className={`flex items-center lg:gap-2 ${isUserTracker ? "" : "flex-1 h-12"}`}
+                  style={isUserTracker ? { flex: "1" } : {}}
                 >
                   <Navigation className="w-5 h-5" />
                   {t("map.currentLocation")}
                 </Button>
+                
+                {isUserTracker && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleConfirmPinClick}
+                    className="flex items-center lg:gap-2 bg-green-600 text-white hover:bg-green-700"
+                    style={{ flex: "1" }}
+                  >
+                    <Check className="w-5 h-5" />
+                    Confirm Pin
+                  </Button>
+                )}
 
                 <Dialog
                   open={showPinDialog}
@@ -505,16 +841,18 @@ export default function HomePage() {
                     }
                   }}
                 >
-                  <DialogTrigger asChild>
-                    <Button
-                      // variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2 w-1/2 bg-black"
-                    >
-                      <Plus className="w-4 h-4" />
-                      {t("map.addPin")}
-                    </Button>
-                  </DialogTrigger>
+                  {/* Hide "Add Pin" button for organizations - they only manage pins */}
+                  {(user as User)?.accountType !== 'organization' && (
+                    <DialogTrigger asChild>
+                      <Button
+                        size={isUserTracker ? "sm" : "default"}
+                        className={`flex items-center gap-2 bg-black ${isUserTracker ? "w-1/2" : "flex-1 h-12"}`}
+                      >
+                        <Plus className="w-4 h-4" />
+                        {t("map.addPin")}
+                      </Button>
+                    </DialogTrigger>
+                  )}
                   <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                       <DialogTitle>{t("map.title")}</DialogTitle>
@@ -540,7 +878,7 @@ export default function HomePage() {
                           </SelectContent>
                         </Select>
                       </div>
-
+                      
                       <div>
                         <Label htmlFor="pin-title" className="mb-2">
                           Phone No
@@ -552,7 +890,7 @@ export default function HomePage() {
                           placeholder="Enter Phone..."
                         />
                       </div>
-
+                      
                       <div>
                         <Label htmlFor="pin-description" className="mb-2">
                           {t("map.description")}
@@ -565,7 +903,7 @@ export default function HomePage() {
                           rows={3}
                         />
                       </div>
-
+                      
                       <div>
                         <Label htmlFor="pin-image" className="mb-2">
                           {t("map.uploadImage")}
@@ -601,13 +939,96 @@ export default function HomePage() {
                         </div>
                       )}
 
+                      {/* Tracker: Requested Items UI */}
+                      {isUserTracker && (
+                        <div className="space-y-3 border-t pt-4">
+                          <Label className="text-sm font-medium">Select Requested Items</Label>
+                          <div className="max-h-48 overflow-y-auto space-y-2">
+                            {availableItems.length > 0 ? (
+                              availableItems.map((item) => (
+                                <div key={item.id} className="flex items-center gap-3 p-2 border rounded-lg">
+                                  <input
+                                    type="checkbox"
+                                    id={`tracker-item-${item.id}`}
+                                    checked={trackerSelectedItems.has(item.id)}
+                                    onChange={() => {
+                                      const newSelected = new Map(trackerSelectedItems);
+                                      if (newSelected.has(item.id)) {
+                                        newSelected.delete(item.id);
+                                      } else {
+                                        newSelected.set(item.id, 10);
+                                      }
+                                      setTrackerSelectedItems(newSelected);
+                                    }}
+                                    className="w-4 h-4"
+                                  />
+                                  <Label htmlFor={`tracker-item-${item.id}`} className="flex-1 cursor-pointer text-xs">
+                                    {item.name} <span className="text-xs text-gray-500">({item.unit})</span>
+                                  </Label>
+                                  {trackerSelectedItems.has(item.id) && (
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 w-6 p-0"
+                                        onClick={() => {
+                                          const qty = Math.max(0, (trackerSelectedItems.get(item.id) || 0) - 1);
+                                          const newSelected = new Map(trackerSelectedItems);
+                                          if (qty > 0) {
+                                            newSelected.set(item.id, qty);
+                                          } else {
+                                            newSelected.delete(item.id);
+                                          }
+                                          setTrackerSelectedItems(newSelected);
+                                        }}
+                                        disabled={(trackerSelectedItems.get(item.id) || 0) === 0}
+                                      >
+                                        -
+                                      </Button>
+                                      <span className="w-8 text-center text-xs">{trackerSelectedItems.get(item.id) || 0}</span>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 w-6 p-0"
+                                        onClick={() => {
+                                          const qty = (trackerSelectedItems.get(item.id) || 0) + 1;
+                                          const newSelected = new Map(trackerSelectedItems);
+                                          newSelected.set(item.id, qty);
+                                          setTrackerSelectedItems(newSelected);
+                                        }}
+                                      >
+                                        +
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-gray-500 text-center py-2">No items available</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    
                       <div className="flex gap-2">
-                        <Button onClick={handleCreatePin} className="flex-1">
-                          {t("map.submit")}
+                        <Button
+                          onClick={handleCreatePin}
+                          className="flex-1"
+                          disabled={isCreatingPin}
+                        >
+                          {isCreatingPin ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Creating...
+                            </div>
+                          ) : (
+                            t("map.submit")
+                          )}
                         </Button>
                         <Button
                           variant="outline"
                           onClick={() => setShowPinDialog(false)}
+                          disabled={isCreatingPin}
                         >
                           {t("map.cancel")}
                         </Button>
@@ -616,7 +1037,6 @@ export default function HomePage() {
                   </DialogContent>
                 </Dialog>
               </div>
-              {/* </div> */}
             </div>
 
             <Card className="h-[800px] py-0">
@@ -652,7 +1072,7 @@ export default function HomePage() {
                     </div>
                   </div>
                 )}
-
+                    
                 {/* Location Selection Indicator */}
                 {isSelectingLocation && (
                   <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 z-10 max-w-xs">
@@ -674,33 +1094,33 @@ export default function HomePage() {
                     </Button>
                   </div>
                 )}
-
-                {/* Map Legend */}
+                  
+                  {/* Map Legend */}
                 <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 z-10">
-                  <h3 className="text-sm font-semibold mb-2">Legend</h3>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="w-4 h-4 bg-red-500 rounded-full" />
-                      <span>{t("map.damagedLocation")}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="w-4 h-4 bg-green-500 rounded-full" />
-                      <span>{t("map.safeZone")}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="w-3 h-3 bg-yellow-400 rounded-full" />
-                      <span>{t("map.pending")}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="w-3 h-3 bg-green-400 rounded-full" />
-                      <span>{t("map.confirmed")}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="w-3 h-3 bg-blue-400 rounded-full" />
-                      <span>{t("map.completed")}</span>
+                    <h3 className="text-sm font-semibold mb-2">Legend</h3>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-4 h-4 bg-red-500 rounded-full" />
+                        <span>{t("map.damagedLocation")}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-4 h-4 bg-green-500 rounded-full" />
+                        <span>{t("map.safeZone")}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-3 h-3 bg-yellow-400 rounded-full" />
+                        <span>{t("map.pending")}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-3 h-3 bg-green-400 rounded-full" />
+                        <span>{t("map.confirmed")}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-3 h-3 bg-blue-400 rounded-full" />
+                        <span>{t("map.completed")}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
               </CardContent>
             </Card>
           </div>
@@ -761,7 +1181,7 @@ export default function HomePage() {
                               <Shield className="w-4 h-4 text-green-500" />
                             )}
                             <span className="font-medium text-sm">
-                              {pin.phone}
+                              {pin.type === "damaged" ? "Damaged Location" : "Safe Zone"}
                             </span>
                           </div>
                           <p className="text-xs text-gray-600 line-clamp-2">
@@ -784,36 +1204,7 @@ export default function HomePage() {
                           </div>
                         </div>
                       </div>
-
-                      {/* Action buttons for volunteers */}
-                      {userRole === "tracking_volunteer" &&
-                        pin.status === "pending" && (
-                          <div className="flex gap-1 mt-2">
-                            <Button
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleConfirmPin(pin.id);
-                              }}
-                              className="flex-1"
-                            >
-                              <Check className="w-3 h-3 mr-1" />
-                              Confirm
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDenyPin(pin.id);
-                              }}
-                              className="flex-1"
-                            >
-                              <X className="w-3 h-3 mr-1" />
-                              Deny
-                            </Button>
-                          </div>
-                        )}
+                      
 
                       {userRole === "supply_volunteer" &&
                         pin.status === "confirmed" &&
@@ -836,7 +1227,7 @@ export default function HomePage() {
               </CardContent>
             </Card>
 
-            {/* Emergency Kit Reminder */}
+            {/* Emergency Kit Checklist */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -845,13 +1236,40 @@ export default function HomePage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    Remember to check your emergency kit regularly. Ensure you
-                    have water, food, flashlight, and first aid supplies.
-                  </AlertDescription>
-                </Alert>
+                <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
+                  {[
+                    { id: "water", label: "Water (1 gallon per person per day)" },
+                    { id: "food", label: "Non-perishable food (3-day supply)" },
+                    { id: "flashlight", label: "Flashlight" },
+                    { id: "firstAid", label: "First aid supplies" },
+                    { id: "batteries", label: "Extra batteries" },
+                    { id: "radio", label: "Battery-powered or hand-crank radio" },
+                    { id: "whistle", label: "Whistle (to signal for help)" },
+                    { id: "dustMask", label: "Dust mask" },
+                    { id: "plasticSheeting", label: "Plastic sheeting and duct tape" },
+                    { id: "canOpener", label: "Manual can opener" },
+                    { id: "localMaps", label: "Local maps" },
+                    { id: "cellPhone", label: "Cell phone with charger" },
+                    { id: "cash", label: "Cash or traveler's checks" },
+                    { id: "importantDocuments", label: "Important documents (copies)" },
+                    { id: "warmClothing", label: "Warm clothing and blankets" },
+                    { id: "tools", label: "Basic tools (wrench, pliers)" },
+                    { id: "sanitation", label: "Sanitation and personal hygiene items" },
+                  ].map(({ id, label }) => (
+                    <div key={id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={id}
+                        checked={emergencyKitItems[id] || false}
+                        onCheckedChange={(checked) =>
+                          setEmergencyKitItems(prev => ({ ...prev, [id]: checked as boolean }))
+                        }
+                      />
+                      <Label htmlFor={id} className="text-sm font-normal cursor-pointer">
+                        {label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -881,19 +1299,19 @@ export default function HomePage() {
                   </div>
                 </Badge>
               </div>
-
+              
               <p className="text-gray-700">{selectedPin.description}</p>
-
+              
               {selectedPin.image && (
                 <div className="w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
-                  <img
-                    src={selectedPin.image}
+                  <img 
+                    src={selectedPin.image} 
                     alt={selectedPin.phone}
                     className="w-full h-full object-cover"
                   />
                 </div>
               )}
-
+              
               <div className="text-sm text-gray-500 space-y-1">
                 <div>Reported by: {selectedPin.createdBy}</div>
                 <div>Time: {selectedPin.createdAt.toLocaleString()}</div>
@@ -901,29 +1319,28 @@ export default function HomePage() {
                   <div>Assigned to: {selectedPin.assignedTo}</div>
                 )}
               </div>
-
+              
               {/* Action buttons */}
               <div className="flex gap-2">
-                {userRole === "tracking_volunteer" &&
-                  selectedPin.status === "pending" && (
-                    <>
-                      <Button
-                        onClick={() => handleConfirmPin(selectedPin.id)}
-                        className="flex-1"
-                      >
-                        <Check className="w-4 h-4 mr-2" />
-                        Confirm
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleDenyPin(selectedPin.id)}
-                        className="flex-1"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        Deny
-                      </Button>
-                    </>
-                  )}
+                {isUserTracker && selectedPin.status === "pending" && (
+                  <>
+                    <Button
+                      onClick={() => handleConfirmPin(selectedPin.id)}
+                      className="flex-1"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      Confirm
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleDenyPin(selectedPin.id)}
+                      className="flex-1"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Deny
+                    </Button>
+                  </>
+                )}
 
                 {userRole === "supply_volunteer" &&
                   selectedPin.status === "confirmed" &&
@@ -936,6 +1353,156 @@ export default function HomePage() {
                       Mark Delivered
                     </Button>
                   )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Pin List Dialog for Tracker Volunteers */}
+      {isUserTracker && (
+        <Dialog open={showPinListDialog} onOpenChange={setShowPinListDialog}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Nearby Unconfirmed Pins</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              {getNearbyUnconfirmedPins().length === 0 ? (
+                <p className="text-gray-500 text-center py-4">
+                  No unconfirmed pins found nearby. Please get your current location first.
+                </p>
+              ) : (
+                getNearbyUnconfirmedPins().map((pin) => (
+                  <Card
+                    key={pin.id}
+                    className="cursor-pointer hover:bg-gray-50"
+                    onClick={() => handleSelectPinToConfirm(pin)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            {pin.type === "damaged" ? (
+                              <AlertTriangle className="w-4 h-4 text-red-500" />
+                            ) : (
+                              <Shield className="w-4 h-4 text-green-500" />
+                            )}
+                            <span className="font-medium">{pin.type === "damaged" ? "Damaged Location" : "Safe Zone"}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2">{pin.description}</p>
+                          <div className="flex items-center gap-4 text-xs text-gray-500">
+                            <span>Phone: {pin.phone}</span>
+                            <span>Reporter: {pin.createdBy}</span>
+                            <span>{pin.createdAt.toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <Button size="sm" variant="outline">
+                          Select
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Confirm Pin Dialog */}
+      {isUserTracker && pinToConfirm && (
+        <Dialog open={showConfirmPinDialog} onOpenChange={setShowConfirmPinDialog}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Confirm Pin Details</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Pin Details */}
+              <div className="space-y-2 border-b pb-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Phone</Label>
+                  <p className="text-sm">{pinToConfirm.phone}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Status</Label>
+                  <Badge className={getStatusColor(pinToConfirm.status)}>
+                    {pinToConfirm.status}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Description</Label>
+                  <p className="text-sm">{pinToConfirm.description}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Reporter</Label>
+                  <p className="text-sm">{pinToConfirm.createdBy}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Timestamp</Label>
+                  <p className="text-sm">{pinToConfirm.createdAt.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Items from Database */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Select Items Needed</Label>
+                
+                {availableItems.length > 0 ? (
+                  availableItems.map((item) => (
+                    <div key={item.id} className="flex items-center gap-3 p-3 border rounded-lg">
+                      <input
+                        type="checkbox"
+                        id={`item-${item.id}`}
+                        checked={selectedItems.has(item.id)}
+                        onChange={() => handleItemToggle(item.id, 10)}
+                        className="w-4 h-4"
+                      />
+                      <Label htmlFor={`item-${item.id}`} className="flex-1 cursor-pointer">
+                        {item.name} <span className="text-xs text-gray-500">({item.unit})</span>
+                      </Label>
+                      
+                      {selectedItems.has(item.id) && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleItemQuantityChange(item.id, Math.max(0, (selectedItems.get(item.id) || 0) - 1))}
+                            disabled={(selectedItems.get(item.id) || 0) === 0}
+                          >
+                            -
+                          </Button>
+                          <span className="w-12 text-center">{selectedItems.get(item.id) || 0}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleItemQuantityChange(item.id, (selectedItems.get(item.id) || 0) + 1)}
+                          >
+                            +
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 text-center py-4">No items available</p>
+                )}
+              </div>
+
+              {/* Confirm Button */}
+              <div className="flex gap-2 pt-4 border-t">
+                <Button onClick={handleConfirmPinWithItems} className="flex-1">
+                  <Check className="w-4 h-4 mr-2" />
+                  Confirm Pin
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowConfirmPinDialog(false);
+                    setPinToConfirm(null);
+                  }}
+                >
+                  Cancel
+                </Button>
               </div>
             </div>
           </DialogContent>
