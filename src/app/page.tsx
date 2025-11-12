@@ -511,6 +511,7 @@ export default function HomePage() {
         toast({
           title: "Success",
           description: "Pin created successfully",
+          variant: "success",
         });
       } else {
         toast({
