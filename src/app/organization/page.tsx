@@ -78,7 +78,6 @@ interface HelpRequest {
   lat: number
   lng: number
   image?: string
-  urgency: 'low' | 'medium' | 'high'
   status: 'pending' | 'partially_accepted' | 'completed'
   requestedBy: string
   requestedAt: Date
@@ -156,7 +155,6 @@ const mockHelpRequests: HelpRequest[] = [
     lat: 16.8409,
     lng: 96.1735,
     image: '/api/placeholder/400/300',
-    urgency: 'high',
     status: 'pending',
     requestedBy: 'Hospital A',
     requestedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
@@ -175,7 +173,6 @@ const mockHelpRequests: HelpRequest[] = [
     lat: 21.9588,
     lng: 96.0891,
     image: '/api/placeholder/400/300',
-    urgency: 'medium',
     status: 'partially_accepted',
     requestedBy: 'Shelter Manager',
     requestedAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
@@ -213,7 +210,6 @@ const mockHelpRequests: HelpRequest[] = [
     lat: 16.8509,
     lng: 96.1835,
     image: '/api/placeholder/400/300',
-    urgency: 'high',
     status: 'completed',
     requestedBy: 'Fire Department',
     requestedAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
@@ -622,15 +618,6 @@ export default function OrganizationPage() {
     return (request.acceptedItems && request.acceptedItems.length > 0) || false
   }
 
-  const getUrgencyColor = (urgency: string) => {
-    switch (urgency) {
-      case 'high': return 'bg-red-100 text-red-800'
-      case 'medium': return 'bg-yellow-100 text-yellow-800'
-      case 'low': return 'bg-green-100 text-green-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800'
@@ -742,9 +729,6 @@ export default function OrganizationPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="font-medium text-lg">{request.title}</h3>
-                        <Badge className={getUrgencyColor(request.urgency)}>
-                          {request.urgency}
-                        </Badge>
                         <Badge className={getStatusColor(request.status)}>
                           {request.status === 'partially_accepted' ? 'Partially Accepted' : request.status}
                         </Badge>
@@ -754,6 +738,7 @@ export default function OrganizationPage() {
                             Accepted
                           </Badge>
                         )}
+
                       </div>
                       {request.description && (
                         <p className="text-sm text-gray-600 mb-3">{request.description}</p>
