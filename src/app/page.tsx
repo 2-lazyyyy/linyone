@@ -185,6 +185,7 @@ export default function HomePage() {
   const isSelectingLocationRef = useRef(false);
   // Route drawing refs
   const routeIds = useRef({ source: "tracker-route", layer: "tracker-route-layer" });
+  const [activeRoutePinId, setActiveRoutePinId] = useState<string | null>(null);
 
   // Heuristic: decide if an AI suggestion looks like a rescue request
   const isRescueRelated = (s: AISuggestion | null | undefined) => {
@@ -404,6 +405,7 @@ export default function HomePage() {
     if (map.current.getSource(source)) {
       map.current.removeSource(source);
     }
+    setActiveRoutePinId(null);
   };
 
   const fitToLine = (coords: [number, number][]) => {
@@ -481,6 +483,7 @@ export default function HomePage() {
           const coords: [number, number][] | undefined = json?.routes?.[0]?.geometry?.coordinates;
           if (coords && coords.length) {
             drawRoute(coords);
+            setActiveRoutePinId(pin.id);
             return;
           }
         }
@@ -490,6 +493,7 @@ export default function HomePage() {
         [userLocation.lng, userLocation.lat],
         [pin.lng, pin.lat],
       ]);
+      setActiveRoutePinId(pin.id);
     } catch (e) {
       console.warn("Failed to draw route, drawing straight line", e);
       if (userLocation) {
@@ -497,6 +501,7 @@ export default function HomePage() {
           [userLocation.lng, userLocation.lat],
           [pin.lng, pin.lat],
         ]);
+        setActiveRoutePinId(pin.id);
       }
     }
   };
@@ -1389,7 +1394,14 @@ export default function HomePage() {
                         {!isUserTracker && pinType === "safe" && aiSuggestAdd && isRescueRelated(aiSuggestAdd) && (
                           <Alert className="mt-2 border-yellow-300">
                             <AlertDescription className="text-xs text-yellow-800">
-                              This looks like an emergency situation. Please switch to "Damaged Location" or adjust the description/photo.
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1">
+                                  This looks like an emergency situation. Please switch to "Damaged Location" or adjust the description/photo.
+                                </div>
+                                <Button size="sm" variant="outline" onClick={() => setPinType("damaged")}>
+                                  Switch to Damaged
+                                </Button>
+                              </div>
                             </AlertDescription>
                           </Alert>
                         )}
@@ -1890,6 +1902,18 @@ export default function HomePage() {
                           >
                             <Navigation className="w-3 h-3 mr-1" /> Route
                           </Button>
+                          {activeRoutePinId === pin.id && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                clearRoute();
+                              }}
+                            >
+                              Clear
+                            </Button>
+                          )}
                           <Button size="sm" variant="outline">
                             Select
                           </Button>
@@ -1922,13 +1946,15 @@ export default function HomePage() {
                   >
                     <Navigation className="w-3 h-3 mr-1" /> Show Route
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => clearRoute()}
-                  >
-                    Clear Route
-                  </Button>
+                  {activeRoutePinId === pinToConfirm.id && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => clearRoute()}
+                    >
+                      Clear Route
+                    </Button>
+                  )}
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Phone</Label>
