@@ -8,13 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { 
   UserPlus, 
-  Shield, 
-  Users, 
-  Building, 
   AlertTriangle,
   Eye,
   EyeOff,
@@ -23,19 +20,32 @@ import {
 import { useLanguage } from '@/hooks/use-language'
 import { useAuth } from '@/hooks/use-auth'
 
+type AccountType = 'user' | 'organization'
+
+interface RegisterFormState {
+  accountType: AccountType
+  name: string
+  email: string
+  phone: string
+  address: string
+  password: string
+  confirmPassword: string
+  agreeToTerms: boolean
+}
+
 export default function RegisterPage() {
   const { t } = useLanguage()
   const { register, isLoading } = useAuth()
   const router = useRouter()
   
-  const [registerForm, setRegisterForm] = useState({
+  const [registerForm, setRegisterForm] = useState<RegisterFormState>({
+    accountType: 'user',
     name: '',
     email: '',
     phone: '',
+    address: '',
     password: '',
     confirmPassword: '',
-    role: 'user' as 'user' | 'tracking_volunteer' | 'supply_volunteer',
-    organizationId: '',
     agreeToTerms: false
   })
   const [showPassword, setShowPassword] = useState(false)
@@ -57,12 +67,12 @@ export default function RegisterPage() {
     }
     
     const result = await register({
+      accountType: registerForm.accountType,
       name: registerForm.name,
       email: registerForm.email,
       phone: registerForm.phone,
       password: registerForm.password,
-      role: registerForm.role,
-      organizationId: registerForm.organizationId || undefined
+      address: registerForm.accountType === 'organization' ? registerForm.address : undefined
     })
     
     if (result.success) {
@@ -79,19 +89,15 @@ export default function RegisterPage() {
     }))
   }
 
-  const handleRoleChange = (value: string) => {
+  const handleAccountTypeChange = (value: AccountType | string) => {
+    if (!value) {
+      return
+    }
     setRegisterForm(prev => ({
       ...prev,
-      role: value as 'user' | 'tracking_volunteer' | 'supply_volunteer'
+      accountType: value as AccountType
     }))
   }
-
-  // Mock organizations for demo
-  const organizations = [
-    { id: 'org1', name: 'Rescue Team A' },
-    { id: 'org2', name: 'Medical Response B' },
-    { id: 'org3', name: 'Supply Chain C' }
-  ]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center p-4">
@@ -110,9 +116,6 @@ export default function RegisterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-center">{t('auth.createAccount')}</CardTitle>
-            <CardDescription className="text-center">
-              Join our earthquake response community
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleRegister} className="space-y-4">
@@ -122,9 +125,31 @@ export default function RegisterPage() {
                 </Alert>
               )}
               
+              <div className="flex flex-col gap-2">
+                <ToggleGroup
+                  type="single"
+                  value={registerForm.accountType}
+                  onValueChange={handleAccountTypeChange}
+                  className="w-full"
+                >
+                  <ToggleGroupItem value="user" className="flex-1">
+                    <div className="flex items-center justify-center py-1">
+                      <span className="text-sm font-medium">User</span>
+                    </div>
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="organization" className="flex-1">
+                    <div className="flex items-center justify-center py-1">
+                      <span className="text-sm font-medium">Organization</span>
+                    </div>
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">{t('auth.name')}</Label>
+                  <Label htmlFor="name">
+                    {registerForm.accountType === 'organization' ? 'Organization Name' : t('auth.name')}
+                  </Label>
                   <Input
                     id="name"
                     name="name"
@@ -152,66 +177,41 @@ export default function RegisterPage() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="phone">{t('auth.phone')}</Label>
+                  <Label htmlFor="phone">
+                    {registerForm.accountType === 'organization' ? 'Organization Phone' : t('auth.phone')}
+                  </Label>
                   <Input
                     id="phone"
                     name="phone"
                     type="tel"
                     value={registerForm.phone}
                     onChange={handleInputChange}
-                    placeholder="Enter your phone number"
+                    placeholder={
+                      registerForm.accountType === 'organization'
+                        ? 'Enter organization contact number'
+                        : 'Enter your phone number'
+                    }
                     required
                   />
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="role">{t('auth.role')}</Label>
-                  <Select value={registerForm.role} onValueChange={handleRoleChange}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">
-                        <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4" />
-                          {t('auth.user')}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="tracking_volunteer">
-                        <div className="flex items-center gap-2">
-                          <Shield className="w-4 h-4" />
-                          {t('auth.trackingVolunteer')}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="supply_volunteer">
-                        <div className="flex items-center gap-2">
-                          <Building className="w-4 h-4" />
-                          {t('auth.supplyVolunteer')}
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
-              
-              {/* Organization selection for volunteers */}
-              {(registerForm.role === 'tracking_volunteer' || registerForm.role === 'supply_volunteer') && (
+
+              {registerForm.accountType === 'organization' && (
                 <div className="space-y-2">
-                  <Label htmlFor="organization">{t('auth.selectOrganization')}</Label>
-                  <Select value={registerForm.organizationId} onValueChange={(value) => setRegisterForm(prev => ({ ...prev, organizationId: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an organization" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {organizations.map((org) => (
-                        <SelectItem key={org.id} value={org.id}>
-                          {org.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="address">Organization Address</Label>
+                  <Input
+                    id="address"
+                    name="address"
+                    type="text"
+                    value={registerForm.address}
+                    onChange={handleInputChange}
+                    placeholder="Enter organization address"
+                    required
+                  />
                 </div>
               )}
+              
+              {/* Removed role-based organization selection */}
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -224,6 +224,7 @@ export default function RegisterPage() {
                       value={registerForm.password}
                       onChange={handleInputChange}
                       placeholder="Enter password"
+                      className="pr-10"
                       required
                     />
                     <Button
@@ -252,6 +253,7 @@ export default function RegisterPage() {
                       value={registerForm.confirmPassword}
                       onChange={handleInputChange}
                       placeholder="Confirm password"
+                      className="pr-10"
                       required
                     />
                     <Button
@@ -308,45 +310,7 @@ export default function RegisterPage() {
           </CardContent>
         </Card>
 
-        {/* Role Information */}
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="text-sm">Role Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 text-sm">
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-2 font-medium text-blue-800">
-                  <Users className="w-4 h-4" />
-                  {t('auth.user')}
-                </div>
-                <div className="text-blue-700 mt-1">
-                  Access to map view, family locator, and safety learning modules
-                </div>
-              </div>
-              
-              <div className="p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-2 font-medium text-green-800">
-                  <Shield className="w-4 h-4" />
-                  {t('auth.trackingVolunteer')}
-                </div>
-                <div className="text-green-700 mt-1">
-                  Verify and manage reported areas, confirm pins from users
-                </div>
-              </div>
-              
-              <div className="p-3 bg-orange-50 rounded-lg">
-                <div className="flex items-center gap-2 font-medium text-orange-800">
-                  <Building className="w-4 h-4" />
-                  {t('auth.supplyVolunteer')}
-                </div>
-                <div className="text-orange-700 mt-1">
-                  Deliver supplies to affected areas and mark completion
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Removed Role Information section */}
       </div>
     </div>
   )

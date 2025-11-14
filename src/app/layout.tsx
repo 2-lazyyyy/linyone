@@ -5,12 +5,21 @@ import { Toaster } from "@/components/ui/toaster";
 import { LanguageProvider } from "@/hooks/use-language";
 import { AuthProvider } from "@/hooks/use-auth";
 import { Navigation } from "@/components/navigation";
+import { AlertToToastBridge } from "@/components/alert-to-toast-bridge";
+import { NotificationToasts } from "@/components/notification-toasts";
+import { LiveAlerts } from "@/components/alerts/live-alerts";
+import DisasterToasts from "@/components/alerts/disaster-toasts";
+import LastSeenUpdater from "@/components/last-seen-updater";
 
-// ✅ Only the unified widget (has the mode switch)
-import AIChatAssistant from "@/components/ai-chat";
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   // ... your existing metadata ...
@@ -24,12 +33,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <div className="min-h-screen flex flex-col">
               <Navigation />
-              <main className="flex-1">{children}</main>
+              {/* Global compact alerts feed (can be hidden or styled differently) */}
+              {/* <div className="px-4 py-2 bg-gray-50 border-b">
+                <LiveAlerts className="hidden lg:block" />
+              </div> */}
+              <main className="flex-1">
+                {/* Background task: update user's last seen location periodically */}
+                <LastSeenUpdater />
+                {children}
+              </main>
             </div>
             <Toaster />
 
             {/* Single floating assistant with Assistant/Mental tabs */}
             <AIChatAssistant />
+            <AlertToToastBridge />
+            <NotificationToasts />
+            <DisasterToasts />
           </AuthProvider>
         </LanguageProvider>
       </body>
