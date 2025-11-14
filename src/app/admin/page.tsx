@@ -75,10 +75,12 @@ import {
   Clock,
   Package,
   BarChart3,
+  Star,
+  Calendar,
 } from "lucide-react";
 import { useLanguage } from "@/hooks/use-language";
 import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/lib/supabase"; // Make sure you have this configured
+import { supabase } from "@/lib/supabase";
 
 interface Organization {
   id: string;
@@ -108,14 +110,12 @@ interface PlatformUser {
   name: string;
   email: string;
   phone?: string;
-  role:
-    | "user"
-    | "tracking_volunteer"
-    | "supply_volunteer"
-    | "organization"
-    | "admin";
-  status: "active" | "inactive";
+  password?: string;
   created_at: string;
+  is_admin?: boolean;
+  total_points?: number;
+  role: "user" | "tracking_volunteer" | "supply_volunteer" | "organization" | "admin";
+  status: "active" | "inactive";
   last_login?: string;
 }
 
@@ -125,7 +125,7 @@ export default function AdminPage() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [platformUsers, setPlatformUsers] = useState<PlatformUser[]>([]);
   const [userFilter, setUserFilter] = useState<
-    "all" | "tracking_volunteer" | "user" | "organization"
+    "all" | "tracking_volunteer" | "user" | "organization" | "admin"
   >("all");
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [editingUser, setEditingUser] = useState<PlatformUser | null>(null);
@@ -146,6 +146,7 @@ export default function AdminPage() {
     email: "",
     phone: "",
     role: "user" as PlatformUser["role"],
+    is_admin: false,
   });
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -182,7 +183,7 @@ export default function AdminPage() {
           region: org.region || "Unknown",
           contactEmail: org.email,
           contactPhone: org.phone,
-          username: org.email.split('@')[0], // Generate username from email
+          username: org.email.split('@')[0],
           supplies: {
             medical: Math.floor(Math.random() * 300),
             food: Math.floor(Math.random() * 1200),
@@ -197,11 +198,11 @@ export default function AdminPage() {
     }
   };
 
-  // Fetch users from Supabase (assuming you have a users table)
+  // Fetch users from Supabase - Synchronized with database schema
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('users') // Replace with your actual users table name
+        .from('users')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -211,16 +212,26 @@ export default function AdminPage() {
       }
 
       if (data) {
-        setPlatformUsers(data.map(user => ({
-          ...user,
-          status: user.status || "active",
-          role: user.role || "user",
-          lastLogin: user.last_login,
-        })));
+        // Map database fields to PlatformUser interface
+        const mappedUsers: PlatformUser[] = data.map(dbUser => ({
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email || '',
+          phone: dbUser.phone || '',
+          password: dbUser.password,
+          created_at: dbUser.created_at,
+          is_admin: dbUser.is_admin || false,
+          total_points: dbUser.total_points || 0,
+          // Map is_admin to role - you can expand this logic based on your needs
+          role: dbUser.is_admin ? 'admin' : 'user',
+          status: "active", // Default status
+          last_login: dbUser.last_login
+        }));
+        
+        setPlatformUsers(mappedUsers);
       }
     } catch (error) {
       console.error('Error fetching users:', error);
-      // Fallback to mock data if users table doesn't exist
       setPlatformUsers([]);
     }
   };
@@ -437,7 +448,7 @@ export default function AdminPage() {
     }
   };
 
-  // User management functions
+  // User management functions - Synchronized with database
   const handleEditUser = (user: PlatformUser) => {
     setEditingUser(user);
     setEditUserData({
@@ -445,6 +456,7 @@ export default function AdminPage() {
       email: user.email,
       phone: user.phone || "",
       role: user.role,
+      is_admin: user.is_admin || false,
     });
     setEditUserDialogOpen(true);
   };
@@ -453,14 +465,16 @@ export default function AdminPage() {
     if (!editingUser) return;
 
     try {
+      const updateData: any = {
+        name: editUserData.name,
+        email: editUserData.email,
+        phone: editUserData.phone,
+        is_admin: editUserData.role === 'admin',
+      };
+
       const { error } = await supabase
-        .from('users') // Replace with your actual users table name
-        .update({
-          name: editUserData.name,
-          email: editUserData.email,
-          phone: editUserData.phone,
-          role: editUserData.role,
-        })
+        .from('users')
+        .update(updateData)
         .eq('id', editingUser.id);
 
       if (error) {
@@ -471,7 +485,14 @@ export default function AdminPage() {
 
       setPlatformUsers(prev =>
         prev.map((user) =>
-          user.id === editingUser.id ? { ...user, ...editUserData } : user
+          user.id === editingUser.id ? { 
+            ...user, 
+            name: editUserData.name,
+            email: editUserData.email,
+            phone: editUserData.phone,
+            role: editUserData.role,
+            is_admin: editUserData.role === 'admin'
+          } : user
         )
       );
 
@@ -482,6 +503,7 @@ export default function AdminPage() {
         email: "",
         phone: "",
         role: "user",
+        is_admin: false,
       });
       alert('User updated successfully!');
     } catch (error) {
@@ -495,7 +517,7 @@ export default function AdminPage() {
 
     try {
       const { error } = await supabase
-        .from('users') // Replace with your actual users table name
+        .from('users')
         .delete()
         .eq('id', deleteUserId);
 
@@ -523,6 +545,21 @@ export default function AdminPage() {
         return "bg-yellow-100 text-yellow-800";
       case "inactive":
         return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case "admin":
+        return "bg-red-100 text-red-800";
+      case "tracking_volunteer":
+        return "bg-green-100 text-green-800";
+      case "supply_volunteer":
+        return "bg-blue-100 text-blue-800";
+      case "organization":
+        return "bg-purple-100 text-purple-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -693,7 +730,7 @@ export default function AdminPage() {
                     Total Funding
                   </p>
                   <p className="text-2xl font-bold text-purple-600">
-                    ${totalFunding.toLocaleString()}
+                    Ks {totalFunding.toLocaleString()}
                   </p>
                 </div>
                 <DollarSign className="w-8 h-8 text-purple-600" />
@@ -751,7 +788,7 @@ export default function AdminPage() {
                       <TableHead>Organization</TableHead>
                       <TableHead>Region</TableHead>
                       <TableHead>Volunteers</TableHead>
-                      <TableHead>Funding</TableHead>
+                      <TableHead>Funding(Ks)</TableHead>
                       <TableHead>Supplies</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
@@ -792,7 +829,7 @@ export default function AdminPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              <DollarSign className="w-4 h-4 text-gray-500" />
+                              
                               {org.funding || "$0"}
                             </div>
                           </TableCell>
@@ -853,7 +890,6 @@ export default function AdminPage() {
                                 </>
                               )}
                               
-                              {/* Edit Organization Dialog */}
                               <Dialog open={editDialogOpen && editingOrg?.id === org.id} onOpenChange={setEditDialogOpen}>
                                 <DialogTrigger asChild>
                                   <Button
@@ -1038,7 +1074,6 @@ export default function AdminPage() {
                                 </DialogContent>
                               </Dialog>
 
-                              {/* Delete Organization Dialog */}
                               <Dialog open={deleteOrgDialogOpen && deleteOrgId === org.id} onOpenChange={setDeleteOrgDialogOpen}>
                                 <DialogTrigger asChild>
                                   <Button
@@ -1089,7 +1124,7 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
 
-          {/* Manage Users */}
+          {/* Manage Users - Synchronized with Database */}
           <TabsContent value="users" className="space-y-6">
             <Card>
               <CardHeader>
@@ -1100,7 +1135,7 @@ export default function AdminPage() {
                       Manage Users
                     </CardTitle>
                     <CardDescription>
-                      View and manage all platform users
+                      View and manage all platform users - Synchronized with Database
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1110,7 +1145,7 @@ export default function AdminPage() {
                     <Select
                       value={userFilter}
                       onValueChange={(
-                        value: "all" | "tracking_volunteer" | "user" | "organization"
+                        value: "all" | "tracking_volunteer" | "user" | "organization" | "admin"
                       ) => setUserFilter(value)}
                     >
                       <SelectTrigger id="user-filter" className="w-[200px]">
@@ -1118,10 +1153,11 @@ export default function AdminPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Users</SelectItem>
+                        <SelectItem value="admin">Admins</SelectItem>
                         <SelectItem value="tracking_volunteer">
                           Tracker Volunteers
                         </SelectItem>
-                        <SelectItem value="user">Registered Users</SelectItem>
+                        <SelectItem value="user">Regular Users</SelectItem>
                         <SelectItem value="organization">Organizations</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1138,13 +1174,15 @@ export default function AdminPage() {
                       <TableHead>User</TableHead>
                       <TableHead>Contact</TableHead>
                       <TableHead>Role</TableHead>
+                      <TableHead>Points</TableHead>
+                      <TableHead>Joined</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {platformUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                           No users found.
                         </TableCell>
                       </TableRow>
@@ -1175,29 +1213,32 @@ export default function AdminPage() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                className={
-                                  user.role === "tracking_volunteer"
-                                    ? "bg-green-100 text-green-800"
-                                    : user.role === "user"
-                                    ? "bg-blue-100 text-blue-800"
-                                    : user.role === "organization"
-                                    ? "bg-purple-100 text-purple-800"
-                                    : "bg-gray-100 text-gray-800"
-                                }
-                              >
-                                {user.role === "tracking_volunteer"
+                              <Badge className={getRoleColor(user.role)}>
+                                {user.role === "admin"
+                                  ? "Admin"
+                                  : user.role === "tracking_volunteer"
                                   ? "Tracker Volunteer"
-                                  : user.role === "user"
-                                  ? "Registered User"
+                                  : user.role === "supply_volunteer"
+                                  ? "Supply Volunteer"
                                   : user.role === "organization"
                                   ? "Organization"
-                                  : user.role}
+                                  : "User"}
                               </Badge>
                             </TableCell>
                             <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Star className="w-4 h-4 text-yellow-500" />
+                                <span className="font-medium">{user.total_points || 0}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-sm text-gray-500">
+                                <Calendar className="w-4 h-4" />
+                                {new Date(user.created_at).toLocaleDateString()}
+                              </div>
+                            </TableCell>
+                            <TableCell>
                               <div className="flex items-center gap-2">
-                                {/* Edit User Dialog */}
                                 <Dialog open={editUserDialogOpen && editingUser?.id === user.id} onOpenChange={setEditUserDialogOpen}>
                                   <DialogTrigger asChild>
                                     <Button
@@ -1260,7 +1301,8 @@ export default function AdminPage() {
                                           onValueChange={(value: PlatformUser["role"]) =>
                                             setEditUserData(prev => ({
                                               ...prev,
-                                              role: value
+                                              role: value,
+                                              is_admin: value === 'admin'
                                             }))
                                           }
                                         >
@@ -1269,6 +1311,7 @@ export default function AdminPage() {
                                           </SelectTrigger>
                                           <SelectContent>
                                             <SelectItem value="user">User</SelectItem>
+                                            <SelectItem value="admin">Admin</SelectItem>
                                             <SelectItem value="tracking_volunteer">
                                               Tracking Volunteer
                                             </SelectItem>
@@ -1299,7 +1342,6 @@ export default function AdminPage() {
                                   </DialogContent>
                                 </Dialog>
 
-                                {/* Delete User Dialog */}
                                 <Dialog open={deleteUserDialogOpen && deleteUserId === user.id} onOpenChange={setDeleteUserDialogOpen}>
                                   <DialogTrigger asChild>
                                     <Button
@@ -1353,7 +1395,6 @@ export default function AdminPage() {
           {/* Analytics */}
           <TabsContent value="analytics" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Organization Status Pie Chart */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1398,7 +1439,6 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
 
-              {/* Supplies Distribution */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1433,7 +1473,6 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
 
-              {/* Region Distribution */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1470,7 +1509,6 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
 
-              {/* Volunteers vs Funding */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1704,4 +1742,4 @@ export default function AdminPage() {
       </div>
     </div>
   );
-};
+}
