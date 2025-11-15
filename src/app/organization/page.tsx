@@ -32,7 +32,8 @@ import {
   Trash2,
   Warehouse,
   Mail,
-  Phone
+  Phone,
+  AlertCircle
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
@@ -44,6 +45,14 @@ import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { fetchConfirmedPinsForDashboard, acceptHelpRequestItems, checkAndHandleCompletedPin, fetchAggregatedSuppliesByRegion } from '@/services/pins'
 import { fetchVolunteersForOrganization, createVolunteer, updateVolunteer, deleteVolunteer } from '@/services/volunteers'
+import {
+  validateEmail,
+  validatePhone,
+  validateName,
+  validateNumber,
+  validateLength,
+  validateEnum
+} from '@/lib/validation'
 
 interface Volunteer {
   id: string
@@ -268,6 +277,7 @@ export default function OrganizationPage() {
     email: '',
     role: 'tracking_volunteer' as 'tracking_volunteer' | 'supply_volunteer'
   })
+  const [volunteerErrors, setVolunteerErrors] = useState<Record<string, string>>({})
   const [showAddSupply, setShowAddSupply] = useState(false)
   const [editingSupply, setEditingSupply] = useState<Supply | null>(null)
   const [supplyForm, setSupplyForm] = useState({
@@ -279,6 +289,7 @@ export default function OrganizationPage() {
     expiryDate: '',
     notes: ''
   })
+  const [supplyErrors, setSupplyErrors] = useState<Record<string, string>>({})
   const [isLoadingVolunteers, setIsLoadingVolunteers] = useState(false)
 
   // Redirect non-organization users
@@ -355,14 +366,43 @@ export default function OrganizationPage() {
   }
 
   const handleRegisterVolunteer = async () => {
-    if (!newVolunteer.name || !newVolunteer.phone || !newVolunteer.email) {
+    const errors: Record<string, string> = {}
+    
+    // Validate name
+    const nameValidation = validateName(newVolunteer.name, 'Volunteer Name')
+    if (!nameValidation.valid) {
+      errors.name = nameValidation.error || 'Invalid name'
+    }
+    
+    // Validate email
+    const emailValidation = validateEmail(newVolunteer.email)
+    if (!emailValidation.valid) {
+      errors.email = emailValidation.error || 'Invalid email'
+    }
+    
+    // Validate phone
+    const phoneValidation = validatePhone(newVolunteer.phone)
+    if (!phoneValidation.valid) {
+      errors.phone = phoneValidation.error || 'Invalid phone'
+    }
+    
+    // Validate role
+    const roleValidation = validateEnum(newVolunteer.role, ['tracking_volunteer', 'supply_volunteer'], { fieldName: 'Role' })
+    if (!roleValidation.valid) {
+      errors.role = roleValidation.error || 'Invalid role'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setVolunteerErrors(errors)
       toast({
-        title: "❌ Error",
-        description: 'Please fill all required fields (Name, Email, Phone)',
+        title: "❌ Validation Error",
+        description: 'Please fix all errors before submitting',
         variant: "destructive",
       })
       return
     }
+
+    setVolunteerErrors({})
 
     if (!user?.id) {
       toast({
@@ -484,10 +524,43 @@ export default function OrganizationPage() {
   }
 
   const handleAddSupply = () => {
-    if (!supplyForm.name || !supplyForm.quantity || !supplyForm.unit) {
-      alert('Please fill all required fields (Name, Quantity, Unit)')
+    const errors: Record<string, string> = {}
+    
+    // Validate supply name
+    const nameValidation = validateLength(supplyForm.name, { min: 1, max: 100, fieldName: 'Supply Name' })
+    if (!nameValidation.valid) {
+      errors.name = nameValidation.error || 'Invalid supply name'
+    }
+    
+    // Validate quantity
+    const quantityValidation = validateNumber(supplyForm.quantity, { min: 0, fieldName: 'Quantity' })
+    if (!quantityValidation.valid) {
+      errors.quantity = quantityValidation.error || 'Invalid quantity'
+    }
+    
+    // Validate unit
+    const unitValidation = validateLength(supplyForm.unit, { min: 1, max: 50, fieldName: 'Unit' })
+    if (!unitValidation.valid) {
+      errors.unit = unitValidation.error || 'Invalid unit'
+    }
+    
+    // Validate category
+    const categoryValidation = validateEnum(supplyForm.category, ['medical', 'food', 'water', 'shelter', 'equipment', 'other'], { fieldName: 'Category' })
+    if (!categoryValidation.valid) {
+      errors.category = categoryValidation.error || 'Invalid category'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setSupplyErrors(errors)
+      toast({
+        title: "❌ Validation Error",
+        description: 'Please fix all errors before submitting',
+        variant: "destructive",
+      })
       return
     }
+
+    setSupplyErrors({})
 
     const newSupply: Supply = {
       id: Date.now().toString(),
@@ -529,10 +602,52 @@ export default function OrganizationPage() {
   }
 
   const handleUpdateSupply = () => {
-    if (!editingSupply || !supplyForm.name || !supplyForm.quantity || !supplyForm.unit) {
-      alert('Please fill all required fields (Name, Quantity, Unit)')
+    const errors: Record<string, string> = {}
+    
+    if (!editingSupply) {
+      toast({
+        title: "❌ Error",
+        description: 'No supply selected',
+        variant: "destructive",
+      })
       return
     }
+
+    // Validate supply name
+    const nameValidation = validateLength(supplyForm.name, { min: 1, max: 100, fieldName: 'Supply Name' })
+    if (!nameValidation.valid) {
+      errors.name = nameValidation.error || 'Invalid supply name'
+    }
+    
+    // Validate quantity
+    const quantityValidation = validateNumber(supplyForm.quantity, { min: 0, fieldName: 'Quantity' })
+    if (!quantityValidation.valid) {
+      errors.quantity = quantityValidation.error || 'Invalid quantity'
+    }
+    
+    // Validate unit
+    const unitValidation = validateLength(supplyForm.unit, { min: 1, max: 50, fieldName: 'Unit' })
+    if (!unitValidation.valid) {
+      errors.unit = unitValidation.error || 'Invalid unit'
+    }
+    
+    // Validate category
+    const categoryValidation = validateEnum(supplyForm.category, ['medical', 'food', 'water', 'shelter', 'equipment', 'other'], { fieldName: 'Category' })
+    if (!categoryValidation.valid) {
+      errors.category = categoryValidation.error || 'Invalid category'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setSupplyErrors(errors)
+      toast({
+        title: "❌ Validation Error",
+        description: 'Please fix all errors before updating',
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSupplyErrors({})
 
     setSupplies(supplies.map(s =>
       s.id === editingSupply.id
@@ -561,6 +676,10 @@ export default function OrganizationPage() {
       notes: ''
     })
     setShowAddSupply(false)
+    toast({
+      title: "✅ Success",
+      description: 'Supply updated successfully',
+    })
   }
 
   const handleDeleteSupply = (supplyId: string) => {
