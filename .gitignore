@@ -9,7 +9,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-
+/backend/
 
 # testing
 /coverage
@@ -35,7 +35,6 @@ yarn-error.log*
 .env*
 **/.venv/
 **/vectors/
-**/therapy_sessions.json
 # vercel
 .vercel
 
