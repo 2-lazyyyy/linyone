@@ -1,12 +1,16 @@
 "use client";
 
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
   Heart, 
@@ -24,7 +28,8 @@ import {
   Play,
   Award,
   Settings,
-  
+  Droplets,
+  Wind
 } from 'lucide-react'
 import { useLanguage } from '@/hooks/use-language'
 import { useAuth } from '@/hooks/use-auth'
@@ -51,15 +56,85 @@ interface SafetyModule {
   title: string;
   description: string;
   category: string;
-  badge?: string;
   icon: React.ReactNode;
+  point?: number;
+  videoUrl?: string;
+  quiz?: { question: string; options: string[]; answer: string }[];
+  qna?: { question: string; answer: string }[];
 }
 
-// Family members will be loaded from the backend; start with empty list
+interface AlertItem {
+  id: string
+  type: 'earthquake' | 'flood' | 'cyclone'
+  title: string
+  description: string
+  timestamp: Date
+  severity: 'high' | 'medium' | 'low'
+  location?: string
+  actionUrl?: string
+  actionLabel?: string
+}
+
+// Mock data
+const mockFamilyMembers: FamilyMember[] = [
+  {
+    id: '1',
+    name: 'Mother',
+    phone: '+959123456789',
+    uniqueId: 'FAM-001',
+    lastSeen: new Date(Date.now() - 30 * 60 * 1000),
+    status: 'safe',
+    location: { lat: 16.8409, lng: 96.1735, address: 'Yangon, Myanmar' }
+  },
+  {
+    id: '2',
+    name: 'Brother',
+    phone: '+959987654321',
+    uniqueId: 'FAM-002',
+    lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    status: 'unknown'
+  },
+  {
+    id: '3',
+    name: 'Sister',
+    phone: '+959456789123',
+    uniqueId: 'FAM-003',
+    lastSeen: new Date(Date.now() - 15 * 60 * 1000),
+    status: 'safe',
+    location: { lat: 16.8509, lng: 96.1835, address: 'Mandalay, Myanmar' }
+  }
+]
+
+const mockAlerts: AlertItem[] = [
+  {
+    id: '1',
+    type: 'earthquake',
+    title: 'Earthquake Alert',
+    description: 'Magnitude 4.5 detected near Yangon. Please stay alert and follow safety protocols.',
+    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    severity: 'high',
+    location: 'Yangon, Myanmar',
+    actionUrl: '/',
+    actionLabel: 'View on Map'
+  },
+  {
+    id: '2',
+    type: 'earthquake',
+    title: 'Earthquake Warning',
+    description: 'Magnitude 3.2 detected in Mandalay region. Minor shaking expected.',
+    timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
+    severity: 'medium',
+    location: 'Mandalay, Myanmar',
+    actionUrl: '/',
+    actionLabel: 'View on Map'
+  }
+]
 
 export default function DashboardPage() {
   const { t, language } = useLanguage();
   const { user, isAuthenticated } = useAuth();
+  const router = useRouter()
+
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [safetyModules, setSafetyModules] =
     useState<SafetyModule[]>(mockSafetyModules);
@@ -70,22 +145,126 @@ export default function DashboardPage() {
   const [searching, setSearching] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<any>(null);
   const [memberRelation, setMemberRelation] = useState('');
+  const pathname = usePathname()
+  const [completedModuleIds, setCompletedModuleIds] = useState<string[]>([])
+
+
   const [newMember, setNewMember] = useState({
     name: "",
     phone: "",
     uniqueId: "",
   });
-  const [emergencyKitStatus, setEmergencyKitStatus] = useState(75);
+  const [emergencyKitStatus, setEmergencyKitStatus] = useState(0);
+
+  // Calculate emergency kit percentage from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('emergencyKitItems')
+      if (stored) {
+        try {
+          const items = JSON.parse(stored)
+          const totalItems = Object.keys(items).length
+          const checkedItems = Object.values(items).filter(Boolean).length
+          const percentage = Math.round((checkedItems / totalItems) * 100)
+          setEmergencyKitStatus(percentage)
+        } catch (e) {
+          console.error('Failed to calculate emergency kit status:', e)
+          setEmergencyKitStatus(0)
+        }
+      } else {
+        setEmergencyKitStatus(0)
+      }
+    }
+  }, [pathname]) // Recalculate when navigating back to dashboard
+
+  // Load completed modules from sessionStorage (resets on page refresh)
+  const loadCompletedModules = () => {
+    if (typeof window !== 'undefined') {
+      const completed = JSON.parse(sessionStorage.getItem('completedModules') || '[]')
+      setCompletedModuleIds(completed)
+      console.log('Loaded completed modules:', completed)
+      
+      // Update module progress based on completion
+      setSafetyModules(modules => modules.map(module => 
+        completed.includes(module.id)
+          ? { ...module, progress: 100 }
+          : module
+      ))
+    }
+  }
+
+  useEffect(() => {
+    // Load completed modules on page load
+    loadCompletedModules()
+  }, [])
+
+  // Load completed modules when navigating back from lesson
+  useEffect(() => {
+    if (pathname === '/dashboard') {
+      loadCompletedModules()
+    }
+  }, [pathname])
+
+  const formatTimeAgo = (date: Date) => {
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 60) {
+      return `${diffMins} ${diffMins === 1 ? 'minute' : 'minutes'} ago`
+    } else if (diffHours < 24) {
+      return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`
+    } else {
+      return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`
+    }
+  }
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'high':
+        return 'bg-red-100 text-red-800 border-red-200'
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'low':
+        return 'bg-blue-100 text-blue-800 border-blue-200'
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
+  // Redirect admin and organization users to their specific dashboards immediately
+  useEffect(() => {
+    if (user && !isAuthenticated) {
+      // Wait for authentication to be confirmed
+      return
+    }
+    
+    if (user) {
+      if (user.role === 'admin') {
+        router.replace('/admin')
+        return
+      } else if (user.role === 'organization') {
+        router.replace('/organization')
+        return
+      }
+    }
+  }, [user, router, isAuthenticated])
+
+  // Show loading or redirect immediately if user is admin or organization
+  if (user && (user.role === 'admin' || user.role === 'organization')) {
+    return null // Prevent flash of wrong content
+  }
 
   const handleAddFamilyMember = () => {
-    if (!newMember.name || !newMember.phone) return;
-
+    if (!newMember.name || !newMember.phone) return
 
     const member: FamilyMember = {
       id: Date.now().toString(),
       name: newMember.name,
       phone: newMember.phone,
-      uniqueId: "FAM-" + Math.random().toString(36).substr(2, 3).toUpperCase(),
+      uniqueId: 'FAM-' + Math.random().toString(36).substr(2, 3).toUpperCase(),
       lastSeen: new Date(),
       status: "unknown",
     };
@@ -112,22 +291,10 @@ export default function DashboardPage() {
       )
     );
   };
-
   // model progress start
   const handleStartModule = (moduleId: string) => {
-    // Update module progress
-    setSafetyModules((modules) =>
-      modules.map((module) =>
-        module.id === moduleId
-          ? {
-              ...module,
-            }
-          : module
-      )
-    );
-
-    // For now, just log or alert
-    console.log("Would navigate to module page:", moduleId);
+    // Navigate to the lesson page with the module ID
+    router.push(`/safety/lesson/${moduleId}`)
   };
 
   const getStatusColor = (status: string) => {
@@ -140,10 +307,6 @@ export default function DashboardPage() {
         return "bg-yellow-100 text-yellow-800";
     }
   };
-
-  // const completedModules = safetyModules.filter(
-  //   (m) => m.progress === 100
-  // ).length;
 
   // Load family members for current user and subscribe to changes
   useEffect(() => {
@@ -161,6 +324,8 @@ export default function DashboardPage() {
           safety_check_started_at: l.safety_check_started_at,
           safety_check_expires_at: l.safety_check_expires_at,
           lastSeen: new Date(),
+          member: l.member,
+          relation: l.relation,
         }));
         const seen = new Set<string>();
         const deduped = mapped.filter((m: any) => {
@@ -187,7 +352,8 @@ export default function DashboardPage() {
               status: l.safety_status ?? null,
               safety_check_started_at: l.safety_check_started_at,
               safety_check_expires_at: l.safety_check_expires_at,
-              lastSeen: new Date()
+              lastSeen: new Date(),
+              member: l.member,
             }))
             const seen2 = new Set<string>()
             const deduped2 = mapped.filter((m: any) => {
@@ -211,7 +377,9 @@ export default function DashboardPage() {
               status: l.safety_status ?? null,
               safety_check_started_at: l.safety_check_started_at,
               safety_check_expires_at: l.safety_check_expires_at,
-              lastSeen: new Date()
+              lastSeen: new Date(),
+              member: l.member,
+              relation: l.relation,
             }))
             setFamilyMembers(mapped)
           })
@@ -227,6 +395,22 @@ export default function DashboardPage() {
   }, [user?.id])
 
   const safeFamilyMembers = familyMembers.filter((m) => m.status === "safe").length;
+  
+  // Calculate completed modules and total points with useMemo
+  const completedModulesCount = useMemo(() => {
+    console.log('Calculating modules count:', completedModuleIds.length, completedModuleIds)
+    return completedModuleIds.length
+  }, [completedModuleIds]);
+  
+  const totalPointsCollected = useMemo(() => {
+    // Read points from localStorage instead of calculating from modules
+    if (typeof window !== 'undefined') {
+      const points = parseInt(localStorage.getItem('safetyPoints') || '0')
+      console.log('Total points from localStorage:', points)
+      return points
+    }
+    return 0
+  }, [completedModuleIds]); // Re-calculate when modules change
 
   // if (!isAuthenticated) {
   //   return (
@@ -288,9 +472,9 @@ export default function DashboardPage() {
                   <p className="text-sm font-medium text-gray-600">
                     Modules Completed
                   </p>
-                  {/* <p className="text-2xl font-bold text-blue-600">
-                    {completedModules}/{safetyModules.length}
-                  </p> */}
+                  <p className="text-2xl font-bold text-blue-600">
+                    {completedModulesCount}/{safetyModules.length}
+                  </p>
                 </div>
                 <BookOpen className="w-8 h-8 text-blue-600" />
               </div>
@@ -318,11 +502,11 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">
-                    Badges Earned
+                    Points Collected
                   </p>
-                  {/* <p className="text-2xl font-bold text-purple-600">
-                    {completedModules}
-                  </p> */}
+                  <p className="text-2xl font-bold text-purple-600">
+                    {totalPointsCollected}
+                  </p>
                 </div>
                 <Award className="w-8 h-8 text-purple-600" />
               </div>
@@ -330,19 +514,22 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="family" className="space-y-8">
-          <TabsList className="flex flex-wrap w-full justify-center gap-4">
-            <TabsTrigger value="family" className="flex items-center gap-2">
+        <Tabs defaultValue="family" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="family" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm">
               <Users className="w-4 h-4" />
-              {t("dashboard.familyMembers")}
+              <span className="hidden sm:inline">{t("dashboard.familyMembers")}</span>
+              <span className="sm:hidden">Family</span>
             </TabsTrigger>
-            <TabsTrigger value="safety" className="flex items-center gap-2">
+            <TabsTrigger value="safety" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm">
               <Shield className="w-4 h-4" />
-              {t("dashboard.safetyModules")}
+              <span className="hidden sm:inline">{t("dashboard.safetyModules")}</span>
+              <span className="sm:hidden">Safety</span>
             </TabsTrigger>
-            <TabsTrigger value="alerts" className="flex items-center gap-2">
+            <TabsTrigger value="alerts" className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm">
               <AlertTriangle className="w-4 h-4" />
-              {t("dashboard.recentAlerts")}
+              <span className="hidden sm:inline">{t("dashboard.recentAlerts")}</span>
+              <span className="sm:hidden">Alerts</span>
             </TabsTrigger>
           </TabsList>
 
@@ -369,7 +556,7 @@ export default function DashboardPage() {
           />
 
           {/* Safety Modules Tab */}
-          <TabsContent value="safety" className="space-y-6">
+          <TabsContent value="safety" className="space-y-6 mt-5">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -382,7 +569,7 @@ export default function DashboardPage() {
               </CardHeader>
 
               <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {safetyModules.map((module) => (
                     <Card key={module.id}>
                       <CardContent className="p-4">
@@ -391,11 +578,6 @@ export default function DashboardPage() {
                           <div className="flex-1">
                             <h3 className="font-medium flex items-center gap-2">
                               {module.title}
-                              {module.badge && (
-                                <Badge variant="secondary">
-                                  {module.badge}
-                                </Badge>
-                              )}
                             </h3>
 
                             <p className="text-sm text-gray-600 mt-1">
@@ -407,14 +589,17 @@ export default function DashboardPage() {
                             </div>
 
                             <div className="mt-3">
-                              <Link
-                                key={module.id}
-                                href={`/safetycourse/${module.id}`}
-                                className="flex items-center justify-center w-full bg-black rounded-lg text-white py-2"
-                              >
-                                <Play className="w-3 h-3 mr-1" />
-                                {t("safety.start")}
-                              </Link>
+                              {completedModuleIds.includes(module.id) ? (
+                                <Button size="sm" onClick={() => handleStartModule(module.id)} className="w-full" variant="outline">
+                                  <Play className="w-3 h-3 mr-1" />
+                                  Relearn
+                                </Button>
+                              ) : (
+                                <Button size="sm" onClick={() => handleStartModule(module.id)} className="w-full">
+                                  <Play className="w-3 h-3 mr-1" />
+                                  {t('safety.start')}
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </div>

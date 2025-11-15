@@ -11,11 +11,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { 
-  UserPlus, 
-  AlertTriangle,
+  UserPlus,
   Eye,
-  EyeOff,
-  Heart
+  EyeOff
 } from 'lucide-react'
 import { useLanguage } from '@/hooks/use-language'
 import { useAuth } from '@/hooks/use-auth'
@@ -105,9 +103,11 @@ export default function RegisterPage() {
         {/* Logo and Title */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-              <AlertTriangle className="w-8 h-8 text-white" />
-            </div>
+            <img 
+              src="/linyone.svg" 
+              alt="Lin Yone Tech" 
+              className="h-12 w-auto"
+            />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Lin Yone Tech</h1>
           <p className="text-gray-600">{t('auth.register')}</p>
@@ -148,7 +148,7 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">
-                    {registerForm.accountType === 'organization' ? 'Organization Name' : t('auth.name')}
+                    {registerForm.accountType === 'organization' ? t('register.orgName') : t('auth.name')}
                   </Label>
                   <Input
                     id="name"
@@ -156,7 +156,7 @@ export default function RegisterPage() {
                     type="text"
                     value={registerForm.name}
                     onChange={handleInputChange}
-                    placeholder="Enter your full name"
+                    placeholder={t('register.enterFullName')}
                     required
                   />
                 </div>
@@ -169,7 +169,7 @@ export default function RegisterPage() {
                     type="email"
                     value={registerForm.email}
                     onChange={handleInputChange}
-                    placeholder="Enter your email"
+                    placeholder={t('register.enterEmail')}
                     required
                   />
                 </div>
@@ -178,7 +178,7 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">
-                    {registerForm.accountType === 'organization' ? 'Organization Phone' : t('auth.phone')}
+                    {registerForm.accountType === 'organization' ? t('register.orgPhone') : t('auth.phone')}
                   </Label>
                   <Input
                     id="phone"
@@ -188,8 +188,8 @@ export default function RegisterPage() {
                     onChange={handleInputChange}
                     placeholder={
                       registerForm.accountType === 'organization'
-                        ? 'Enter organization contact number'
-                        : 'Enter your phone number'
+                        ? t('register.enterOrgPhone')
+                        : t('register.enterPhone')
                     }
                     required
                   />
@@ -198,14 +198,14 @@ export default function RegisterPage() {
 
               {registerForm.accountType === 'organization' && (
                 <div className="space-y-2">
-                  <Label htmlFor="address">Organization Address</Label>
+                  <Label htmlFor="address">{t('register.orgAddress')}</Label>
                   <Input
                     id="address"
                     name="address"
                     type="text"
                     value={registerForm.address}
                     onChange={handleInputChange}
-                    placeholder="Enter organization address"
+                    placeholder={t('register.enterOrgAddress')}
                     required
                   />
                 </div>
@@ -223,7 +223,7 @@ export default function RegisterPage() {
                       type={showPassword ? 'text' : 'password'}
                       value={registerForm.password}
                       onChange={handleInputChange}
-                      placeholder="Enter password"
+                      placeholder={t('register.enterPassword')}
                       className="pr-10"
                       required
                     />
