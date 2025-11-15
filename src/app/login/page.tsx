@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -13,10 +13,12 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { 
   LogIn,
   Eye,
-  EyeOff
+  EyeOff,
+  AlertCircle
 } from 'lucide-react'
 import { useLanguage } from '@/hooks/use-language'
 import { useAuth } from '@/hooks/use-auth'
+import { validateEmail, validateLength } from '@/lib/validation'
 
 export default function LoginPage() {
   const { t } = useLanguage()
@@ -31,10 +33,52 @@ export default function LoginPage() {
   })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  // Validate email field
+  const validateEmailField = (email: string) => {
+    const result = validateEmail(email)
+    if (!result.valid) {
+      setFieldErrors(prev => ({ ...prev, email: result.error || 'Invalid email' }))
+      return false
+    }
+    setFieldErrors(prev => {
+      const newErrors = { ...prev }
+      delete newErrors.email
+      return newErrors
+    })
+    return true
+  }
+
+  // Validate password field
+  const validatePasswordField = (password: string) => {
+    const result = validateLength(password, { min: 1, fieldName: 'Password' })
+    if (!result.valid) {
+      setFieldErrors(prev => ({ ...prev, password: result.error || 'Password is required' }))
+      return false
+    }
+    setFieldErrors(prev => {
+      const newErrors = { ...prev }
+      delete newErrors.password
+      return newErrors
+    })
+    return true
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setFieldErrors({})
+    
+    // Validate all fields
+    let isValid = true
+    isValid = validateEmailField(loginForm.email) && isValid
+    isValid = validatePasswordField(loginForm.password) && isValid
+
+    if (!isValid) {
+      setError('Please fix the errors below')
+      return
+    }
     
     const result = await login(loginForm.email, loginForm.password, loginForm.accountType)
     
@@ -46,15 +90,41 @@ export default function LoginPage() {
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
     setLoginForm(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value
     }))
+    // Clear error when user starts typing
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[name]
+        return newErrors
+      })
+    }
   }
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    if (name === 'email') {
+      validateEmailField(value)
+    } else if (name === 'password') {
+      validatePasswordField(value)
+    }
+  }
+
   const handleAccountTypeChange = (value: AccountType | string) => {
     if (!value) return
     setLoginForm(prev => ({ ...prev, accountType: value as AccountType }))
+    setError('')
+    setFieldErrors({})
   }
+
+  // Check if form is valid
+  const isFormValid = useMemo(() => {
+    return loginForm.email.trim() !== '' && loginForm.password.trim() !== '' && Object.keys(fieldErrors).length === 0
+  }, [loginForm, fieldErrors])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center p-4">
@@ -105,22 +175,32 @@ export default function LoginPage() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="email">
-                  {t('auth.email')}
+                <Label htmlFor="email" className={fieldErrors.email ? 'text-red-500' : ''}>
+                  {t('auth.email')} *
                 </Label>
                 <Input
                   id="email"
                   name="email"
-                  type="text"
+                  type="email"
                   value={loginForm.email}
                   onChange={handleInputChange}
+                  onBlur={handleBlur}
                   placeholder="Enter email"
+                  className={fieldErrors.email ? 'border-red-500' : ''}
                   required
                 />
+                {fieldErrors.email && (
+                  <div className="flex items-center gap-2 text-red-500 text-sm">
+                    <AlertCircle className="w-4 h-4" />
+                    {fieldErrors.email}
+                  </div>
+                )}
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="password">{t('auth.password')}</Label>
+                <Label htmlFor="password" className={fieldErrors.password ? 'text-red-500' : ''}>
+                  {t('auth.password')} *
+                </Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -128,7 +208,9 @@ export default function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={loginForm.password}
                     onChange={handleInputChange}
+                    onBlur={handleBlur}
                     placeholder="Enter password"
+                    className={fieldErrors.password ? 'border-red-500 pr-10' : 'pr-10'}
                     required
                   />
                   <Button
@@ -145,9 +227,15 @@ export default function LoginPage() {
                     )}
                   </Button>
                 </div>
+                {fieldErrors.password && (
+                  <div className="flex items-center gap-2 text-red-500 text-sm">
+                    <AlertCircle className="w-4 h-4" />
+                    {fieldErrors.password}
+                  </div>
+                )}
               </div>
               
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full" disabled={isLoading || !isFormValid}>
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
