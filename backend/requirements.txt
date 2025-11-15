@@ -5,9 +5,9 @@ python-dotenv==1.0.1
 groq==0.11.0
 requests==2.32.3
 sentence-transformers==3.0.1
-faiss-cpu==1.8.0
+faiss-cpu==1.12.0
 orjson==3.10.7
-numpy==1.26.4          # (keep 1.x to avoid faiss/numpy 2.x issues)
+numpy==1.26.4
 pillow==10.4.0
 pytesseract==0.3.13
 pypdf==4.3.1

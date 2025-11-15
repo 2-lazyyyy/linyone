@@ -60,7 +60,7 @@ serve(async (req: Request) => {
       messages,
       temperature = 0.7,
       max_tokens = 512,
-      model = "gemini-2.5-flash", // or "gemini-1.5-pro"
+      model = "gemini-1.5-flash", // or "gemini-1.5-pro"
     } = await req.json();
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -78,8 +78,8 @@ serve(async (req: Request) => {
       });
     }
 
-    // IMPORTANT: v1 (not v1beta)
-    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${API_KEY}`;
+    // Use v1beta for latest models
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
 
     const body = buildGeminiBody(messages as Msg[], temperature, max_tokens);
 
