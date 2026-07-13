@@ -1,5 +1,5 @@
 const fs = require('fs');
-const content = fs.readFileSync('c:\\Users\\YOGA\\Desktop\\rescura\\src\\app\\api\\ai\\analyze-pin\\route.ts', 'utf8');
+const content = fs.readFileSync('c:\\Users\\YOGA\\Desktop\\LinYone\\src\\app\\api\\ai\\analyze-pin\\route.ts', 'utf8');
 let balance = 0;
 const lines = content.split('\n');
 for (let i = 0; i < lines.length; i++) {

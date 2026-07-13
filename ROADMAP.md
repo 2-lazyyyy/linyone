@@ -1,6 +1,6 @@
-# Rescura: Strategic Roadmap & Market Expansion
+# LinYone: Strategic Roadmap & Market Expansion
 
-Rescura is designed to evolve from a tactical survival utility into a comprehensive, regional infrastructure for disaster resilience. This roadmap outlines our strategic trajectory toward planetary scale, market penetration, and long-term ecosystem sustainability.
+LinYone is designed to evolve from a tactical survival utility into a comprehensive, regional infrastructure for disaster resilience. This roadmap outlines our strategic trajectory toward planetary scale, market penetration, and long-term ecosystem sustainability.
 
 ## 🚀 Vision: Scaling for Resilience
 Our objective is to transition from localized response to a global safety network, ensuring that no survivor is left in a "data blackout."
@@ -13,16 +13,16 @@ Our objective is to transition from localized response to a global safety networ
 ---
 
 ## 🌍 Phase 2: Market Reach & Regional Expansion
-Rescura's growth strategy focuses on high-impact zones within the ASEAN region and beyond.
+LinYone's growth strategy focuses on high-impact zones within the ASEAN region and beyond.
 
 *   **Regional Localization (Phase 1 Complete)**: Native support for Burmese, Thai, Vietnamese, and Malay to ensure zero-friction adoption during crises.
-*   **Public-Private Partnerships (PPP)**: Collaborating with Telecommunication Providers to zero-rate Rescura data traffic, ensuring that survivors can access the cloud layer even with expired data plans.
-*   **NGO Integration**: Partnering with organizations like the Red Cross and ASEAN AHA Centre to unify Rescura's "Verified Pins" with official relief logistics.
+*   **Public-Private Partnerships (PPP)**: Collaborating with Telecommunication Providers to zero-rate LinYone data traffic, ensuring that survivors can access the cloud layer even with expired data plans.
+*   **NGO Integration**: Partnering with organizations like the Red Cross and ASEAN AHA Centre to unify LinYone's "Verified Pins" with official relief logistics.
 
 ---
 
 ## 📊 Phase 3: Business Model & Sustainability (BMC)
-Rescura is built on a "Value-First" sustainability model that balances humanitarian impact with operational longevity.
+LinYone is built on a "Value-First" sustainability model that balances humanitarian impact with operational longevity.
 
 - **Strategic Value Proposition**: Delivering deterministic safety in non-deterministic environments through offline-first AI and verified field intelligence.
 - **Key Customer Segments**: Serving individuals and families (B2C), non-governmental organizations (B2B), and government disaster management agencies (B2G).
@@ -31,11 +31,11 @@ Rescura is built on a "Value-First" sustainability model that balances humanitar
 
 ---
 
-## 🛰️ Future Horizons: Rescura 2030
+## 🛰️ Future Horizons: LinYone 2030
 *   **Satellite Telemetry Integration**: Partnering with LEO (Low Earth Orbit) satellite providers to enable SOS broadcasts in remote regions with zero terrestrial coverage.
 *   **Predictive Urban Resilience**: Utilizing historical pin data and AI to help governments simulate disaster scenarios and optimize safe-zone placement in smart cities.
-*   **Unified Global Safety Standard**: Establishing the Rescura protocol as the industry standard for cross-platform emergency communication.
+*   **Unified Global Safety Standard**: Establishing the LinYone protocol as the industry standard for cross-platform emergency communication.
 
 ---
 
-> **"Rescura's scalability is not just measured in users, but in the seconds of response time saved and the lives preserved through data-driven resilience."**
+> **"LinYone's scalability is not just measured in users, but in the seconds of response time saved and the lives preserved through data-driven resilience."**

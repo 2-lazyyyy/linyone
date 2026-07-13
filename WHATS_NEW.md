@@ -1,8 +1,8 @@
-The Rescura Evolution: Building for the Edge
-Rescura has reached a critical maturity point. What began as a sophisticated web-based administrative dashboard has successfully evolved into a mobile-first, field-ready ecosystem. This pivot acknowledges a fundamental truth of disaster response: critical data is most valuable when it’s accessible in the hands of those on the ground.
+The LinYone Evolution: Building for the Edge
+LinYone has reached a critical maturity point. What began as a sophisticated web-based administrative dashboard has successfully evolved into a mobile-first, field-ready ecosystem. This pivot acknowledges a fundamental truth of disaster response: critical data is most valuable when it’s accessible in the hands of those on the ground.
 
 📱 From Infrastructure to the Front Lines
-While our web foundations remain the "command center" for coordination, the Expo-based mobile application is now the flagship of the Rescura experience. This shift represents a major **architectural improvement**, moving from a centralized model to a distributed, dual-platform system that ensures data parity and real-time synchronization between command centers and field responders.
+While our web foundations remain the "command center" for coordination, the Expo-based mobile application is now the flagship of the LinYone experience. This shift represents a major **architectural improvement**, moving from a centralized model to a distributed, dual-platform system that ensures data parity and real-time synchronization between command centers and field responders.
 
 🛠️ High-Stakes Field Utilities: Recent Engineering Improvements
 We’ve focused recent engineering efforts on survival capabilities that remain functional when traditional infrastructure fails, representing significant leaps in system resilience:

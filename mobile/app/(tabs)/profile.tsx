@@ -47,7 +47,7 @@ const ROLE_SHORTCUTS: Record<string, ShortcutItem[]> = {
   user: [
     { label: 'Dashboard',      route: '/dashboard',      icon: 'grid-outline',           description: 'Family & safety overview' },
     { label: 'Safety Course',  route: '/safety',         icon: 'shield-checkmark-outline', description: 'Training modules' },
-    { label: 'Organizations',  route: 'https://rescura.vercel.app/login',  icon: 'business-outline',       description: 'Find organizations' },
+    { label: 'Organizations',  route: 'https://LinYone.vercel.app/login',  icon: 'business-outline',       description: 'Find organizations' },
   ],
 }
 

@@ -272,7 +272,7 @@ export default function HomeScreen() {
               <Image source={require('../../assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 8 }} />
             )}
             <Text style={styles.floatingGreeting} numberOfLines={1}>
-              {user ? `Hi, ${user.name?.split(' ')[0]} 👋` : 'Rescura'}
+              {user ? `Hi, ${user.name?.split(' ')[0]} 👋` : 'LinYone'}
             </Text>
           </View>
           <TouchableOpacity 

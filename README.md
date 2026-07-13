@@ -1,8 +1,8 @@
-# Rescura: Strategic Disaster Coordination & Field Response
+# LinYone: Strategic Disaster Coordination & Field Response
 
-Rescura is a sophisticated, dual-platform ecosystem designed to modernize emergency response and survival coordination within the ASEAN region. By integrating real-time telemetry, advanced AI heuristics, and offline-first survival protocols, Rescura bridges the critical communication gap between survivors in the field and centralized coordination hubs.
+LinYone is a sophisticated, dual-platform ecosystem designed to modernize emergency response and survival coordination within the ASEAN region. By integrating real-time telemetry, advanced AI heuristics, and offline-first survival protocols, LinYone bridges the critical communication gap between survivors in the field and centralized coordination hubs.
 
-## The Rescura Ecosystem
+## The LinYone Ecosystem
 
 Following the successful establishment of our core web infrastructure, the project has successfully matured into a **fully deployed mobile-first operations phase**.
 

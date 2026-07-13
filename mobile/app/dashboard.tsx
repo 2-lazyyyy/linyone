@@ -268,7 +268,7 @@ export default function DashboardScreen() {
   const handlePredictLocation = async (member: any) => {
     setIsPredictingId(member.id)
     try {
-      const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://rescura.vercel.app'
+      const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://LinYone.vercel.app'
       const res = await fetch(`${baseUrl}/api/ai/predict-location`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

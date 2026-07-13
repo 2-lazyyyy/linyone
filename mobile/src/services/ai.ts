@@ -31,9 +31,9 @@ import { askLocalLlama, checkModelExists } from './offlineAi';
 
 function getSystemPrompt(assistant: AssistantKind): string {
   if (assistant === 'emergency') {
-    return "You are Rescura Emergency AI. Provide short, concise, and safe first-aid and survival instructions. Do not hallucinate medical advice.";
+    return "You are LinYone Emergency AI. Provide short, concise, and safe first-aid and survival instructions. Do not hallucinate medical advice.";
   }
-  return "You are Rescura Mental Health AI. Provide calming, supportive, and extremely brief empathetic responses.";
+  return "You are LinYone Mental Health AI. Provide calming, supportive, and extremely brief empathetic responses.";
 }
 
 export async function askAssistant(message: string, language: ChatLanguage, assistant: AssistantKind = 'emergency'): Promise<ChatResult> {

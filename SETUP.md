@@ -1,6 +1,6 @@
-   # Rescura Ecosystem: Deployment & Configuration Guide
+   # LinYone Ecosystem: Deployment & Configuration Guide
 
-This document provides comprehensive technical procedures for deploying the Rescura ecosystem, encompassing both the **Strategic Coordination Dashboard (Web)** and the **Tactical Field Response Application (Mobile)**.
+This document provides comprehensive technical procedures for deploying the LinYone ecosystem, encompassing both the **Strategic Coordination Dashboard (Web)** and the **Tactical Field Response Application (Mobile)**.
 
 ## Infrastructure Prerequisites
 
@@ -35,7 +35,7 @@ cd ..
 
 ## 2. Strategic Infrastructure (Supabase)
 
-Rescura utilizes Supabase as its primary data orchestration layer.
+LinYone utilizes Supabase as its primary data orchestration layer.
 
 1.  **Project Initialization**: Create a new project at [supabase.com](https://supabase.com).
 2.  **Schema Deployment**: Execute the contents of `database.sql` within the Supabase **SQL Editor**. This initializes the relational schema, including unified User, Organization, and Incident (Pin) tables, while establishing rigorous Row Level Security (RLS) policies.
@@ -60,7 +60,7 @@ NEXT_PUBLIC_MAPBOX_TOKEN=pk.your_token
 
 # Real-time Broadcast Engine
 ABLY_API_KEY=your_server_key
-NEXT_PUBLIC_ABLY_CHANNEL=rescura-main-channel
+NEXT_PUBLIC_ABLY_CHANNEL=LinYone-main-channel
 
 # Intelligence Layer
 GEMINI_API_KEY=your_key
@@ -84,7 +84,7 @@ EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
 
 EXPO_PUBLIC_MAPBOX_TOKEN=pk.your_token
 EXPO_PUBLIC_ABLY_KEY=your_client_publishable_key
-EXPO_PUBLIC_ABLY_CHANNEL=rescura-main-channel
+EXPO_PUBLIC_ABLY_CHANNEL=LinYone-main-channel
 ```
 
 ---
@@ -112,7 +112,7 @@ Scan the generated QR code with a physical device for full hardware access (GPS/
 Upon the first invocation of the Mobile AI Assistant, the system will perform an autonomous **~350MB download** of the Qwen LLM model. This allows for total offline survival guidance using `llama.rn` hardware acceleration.
 
 ### Role-Based Access Control (RBAC) Management
-Rescura employs a multi-tiered security model. To elevate user permissions:
+LinYone employs a multi-tiered security model. To elevate user permissions:
 
 1.  **Administrative Privileges**: Update `is_admin = TRUE` for the target user in the `users` table via the Supabase Table Editor.
 2.  **Organizational Management**: 

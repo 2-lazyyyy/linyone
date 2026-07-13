@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Rescura",
-    "slug": "rescura-mobile",
-    "scheme": "rescura",
+    "name": "LinYone",
+    "slug": "LinYone-mobile",
+    "scheme": "LinYone",
     "version": "0.1.0",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
@@ -17,7 +17,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.rescura.mobile",
+      "bundleIdentifier": "com.LinYone.mobile",
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch",
@@ -30,7 +30,7 @@
       }
     },
     "android": {
-      "package": "com.rescura.mobile",
+      "package": "com.LinYone.mobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"

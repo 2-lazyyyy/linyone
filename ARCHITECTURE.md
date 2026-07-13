@@ -1,10 +1,10 @@
-# Rescura System Architecture
+# LinYone System Architecture
 
-This document details the APIs, models, and integrated services that power the Rescura disaster relief ecosystem.
+This document details the APIs, models, and integrated services that power the LinYone disaster relief ecosystem.
 
 ## 1. Architecture Overview
 
-Rescura follows a **Hybrid Cloud/Edge Architecture** designed for high availability during disasters. 
+LinYone follows a **Hybrid Cloud/Edge Architecture** designed for high availability during disasters. 
 - **Cloud Layer**: Centralized coordination, data persistence, and heavy-duty AI (Gemini).
 - **Edge Layer**: Mobile devices performing background tracking and running local, offline AI (Llama) for zero-connectivity scenarios.
 

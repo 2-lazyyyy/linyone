@@ -312,7 +312,7 @@ export default function AuthScreen() {
               style={{ width: 48, height: 48, borderRadius: 12 }} 
             />
           </LinearGradient>
-          <Text style={styles.brandName}>Rescura</Text>
+          <Text style={styles.brandName}>LinYone</Text>
           <Text style={styles.brandTagline}>
             {mode === 'login' ? 'Welcome back 👋' : 'Join the rescue network 🌟'}
           </Text>
@@ -490,7 +490,7 @@ export default function AuthScreen() {
 
         {/* Footer */}
         <Text style={[styles.footer, { marginBottom: 8 }]}>
-          Rescura · Emergency Response Network
+          LinYone · Emergency Response Network
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

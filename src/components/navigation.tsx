@@ -1291,11 +1291,11 @@ export function Navigation() {
             <div className="flex items-center">
               <Link href="/" className="flex items-center space-x-2">
                 <img
-                  src="/rescura-logo.png"
-                  alt="Rescura"
+                  src="/LinYone-logo.png"
+                  alt="LinYone"
                   className="h-16 w-auto [clip-path:polygon(50%_0%,_100%_20%,_100%_75%,_50%_100%,_0%_75%,_0%_20%)]"
                 />
-                <span className="text-xl font-bold text-gray-900">Rescura</span>
+                <span className="text-xl font-bold text-gray-900">LinYone</span>
               </Link>
             </div>
 
